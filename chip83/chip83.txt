@@ -1,0 +1,58 @@
+-----> Chip83 v0.1
+       by Joe Wingbermuehle
+       19981011
+
+This is a beta! That means it could have bugs still! Please alert me of
+any bugs you find.
+
+>Requirements
+This is a TI-83 SOS program.
+This program requires SOS v1.3+ with libraries ZLib and ZGFXL.
+
+>Description
+This is a Chip8 emulator for the TI-83.
+Chip8 is a game programming language popular in the 1970s onward. It
+is often associated with HP calculators. Chip8 looks similar to
+assembly language, but it requires an emulator (or interpreter) to
+run. Because of the unique instruction set, Chip8 makes writing games
+easy while allowing the games to be very small as well.
+
+>Keys
+The menu screen will guide you through most of the keys.
+The keys while running a program are:
+[2nd] - Restarts the program
+[MODE] - Pause the program and shut off the calculator.
+[DEL] - Exit the program.
+Keys for actual program usage are:
++---+---+---+---+
+| X | X | X | / |
++---+---+---+---+
+| 7 | 8 | 9 | * |
++---+---+---+---+
+| 4 | 5 | 6 | - |
++---+---+---+---+
+| 1 | 2 | 3 | + |
++---+---+---+---+
+| 0 | . |(-)| X |
++---+---+---+---+
+Because Chip8 keys can vary, some of the keys may not be obvious.
+
+>If you want to make your own games, or you are interested in playing
+Chip8 games on your computer, go to
+http://services.worldnet.net/winter/chip8/chip8.htm
+If you find any Chip8 games that you are sure work, send them to me
+to be converted into *.83p files.
+
+
+>History
+Version 0.1 <> 19981011
+	-First release.
+	-It should run all Chip8 programs without any problems.
+
+>Features to be added
+	-Speed option
+	-More of the SChip8 commands (not the larger screen though--it
+	 would be impossible on the TI-83)
+
+Joe Wingbermuehle
+http://joewing.net

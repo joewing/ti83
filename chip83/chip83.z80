@@ -1,0 +1,969 @@
+	.nolist
+	#include	"joeti83.inc"
+	#include	"sos.inc"
+	.org		$9327
+	.list
+
+registers	=sram		; 16 gprs = 16 bytes
+registerF	=sram+15	; last register of the 16 gprs
+registerI	=sram+16	; Index register 2 bytes
+delayTimer	=sram+18	; Delay Timer register
+soundTimer	=sram+19	; Sound Timer register
+randomNum	=sram+20	; Random number variable
+baseAddress	=sram+21	; base address 2 bytes
+stackPointer	=sram+23	; stack pointer 2 bytes
+delayDelay	=sram+25
+curfat		=sram+26	; 2 bytes
+file		=sram+28	; 2 bytes
+progsize	=sram+30	; 2 bytes
+
+	xor	a
+	jr	z,allocateMemory
+	.dw	libraries-$9327
+	.dw	description
+
+	.db	11
+description:
+	.db	"Chip83 v0.1 by Joe W",0
+
+temp_file:
+	.db	6,"!Chip8",0
+
+libraries:
+	.db	"ZGFXL",0,0,0,lib2,vec0
+	.db	"ZLIB",0,0,0,0,lib4,vec1
+	.db	$FF
+
+allocateMemory:
+
+	call	memfree
+	ld	bc,12+$0E00+2
+	or	a
+	sbc	hl,bc
+	ret	c
+	call	setTemp
+	call	chksysvar
+	call	nc,exit
+	ld	hl,12+$0E00
+	call	createprog
+start:	ld	ix,detect_string
+	ld	hl,(fat)
+	ld	(curfat),hl
+	call	vector1
+	ret	nz
+start2:	ld	ix,detect_string
+	ld	hl,(curfat)
+	call	vector1
+	jr	nz,start
+	ld	(curfat),de
+	ld	(file),hl
+	ld	de,-7
+	add	hl,de
+	call	ldhlind
+	ld	(progsize),hl
+restart:
+	call	clrgbuf
+	set	7,(iy+20)
+	ld	hl,9*256
+	ld	(pencol),hl
+	ld	hl,info
+	call	vputs
+	ld	de,21*256+10
+	ld	(pencol),de
+	call	vputs
+	push	hl
+	ld	hl,(file)
+	ld	b,8
+	call	vputsn
+	ld	hl,28*256+10
+	ld	(pencol),hl
+	pop	hl
+	call	vputs
+	ld	de,35*256+10
+	ld	(pencol),de
+	call	vputs
+	ld	de,42*256+10
+	ld	(pencol),de
+	call	vputs
+	ld	bc,0*256+(63-8)
+	ld	de,95*256+(63-8)
+	call	dark_line
+	call	bufcopy
+	ld	hl,2*256
+	ld	(currow),hl
+	ld	hl,description-1
+	call	putps
+	call	getk
+start3:	call	getk
+	cp	56
+	jp	z,exit
+	cp	48
+	jp	z,start2
+	sub	54		; we need a=0
+	jr	nz,start3
+startOver:
+	ld	hl,registers
+	ld	b,16+2+1
+ClearRegisters:
+	ld	(hl),a
+	inc	hl
+	djnz	ClearRegisters
+	ld	hl,sram+32
+	ld	(stackPointer),hl
+	call	setTemp
+	call	chksysvar
+;	ret	c			; this should never happen...
+	inc	de
+	inc	de
+	push	de
+	ld	h,d
+	ld	l,e
+	inc	de
+	ld	bc,$0E00
+	ld	(hl),0
+	ldir
+	pop	de
+	ld	hl,(file)
+	ld	c,8
+	add	hl,bc
+	ld	bc,(progsize)
+	push	de
+	ldir
+	pop	hl
+	push	hl
+	ld	de,-$0200
+	add	hl,de
+	ld	(baseAddress),hl
+	call	setScreen
+	pop	hl
+main:	ld	b,150
+delayLoop:
+	push	hl
+	pop	hl
+	djnz	delayLoop
+	ld	a,($8001)
+	sub	54
+	jp	z,startOver
+	dec	a
+	call	z,pause
+	dec	a
+	jp	z,restart
+	ex	de,hl
+	ld	hl,(stackPointer)
+	ld	bc,sram+30
+	sbc	hl,bc
+	jp	z,stackError
+	ld	a,(delayDelay)
+	dec	a
+	and	%00001111
+	ld	(delayDelay),a
+	jr	nz,delayOver
+	ld	hl,delayTimer
+	ld	a,(hl)
+	or	a
+	jr	z,delayOver
+	dec	a
+	ld	(hl),a
+delayOver:
+	ex	de,hl
+	ld	a,(hl)
+	and	%11110000
+	rra
+	rra
+	rra
+	ld	b,0
+	ld	c,a
+	ld	ix,group_table
+	add	ix,bc
+	ld	c,(ix)
+	ld	b,(ix+1)
+	push	bc
+	ret
+
+group_table:
+	.dw	group0	; system instructions
+	.dw	group1	; jump address
+	.dw	group2	; call address
+	.dw	group3	; ske vx,byte
+	.dw	group4	; skne vx,byte
+	.dw	group5	; ske vx,vy
+	.dw	group6	; load vx,byte
+	.dw	group7	; add vx,byte
+	.dw	group8	; RR instructions
+	.dw	group9	; skne vx,vy
+	.dw	groupA	; ld I,address
+	.dw	groupB	; jump address+v0
+	.dw	groupC	; random vx,mask_byte
+	.dw	groupD	; draw vx,vy,size_nibble
+	.dw	groupE	; skne/ske vx,keypress
+	.dw	groupF	; misc.
+
+; Fx instructions
+groupF:	inc	hl
+	ld	a,(hl)
+	cp	$1E
+	jr	nz,FX2
+	; ADD I,VX
+	push	hl
+	dec	hl
+	call	readRegisterA
+	ld	c,(hl)
+	ld	hl,(registerI)
+	add	hl,bc
+	ld	a,h
+	and	%00001111	; allows overflow at 12 bits (subtract)
+	ld	h,a
+	ld	(registerI),hl
+	pop	hl
+	inc	hl
+	jp	main
+FX2:	cp	$33
+	jr	nz,FX3
+	; Store BCD of Vx in [I],[I+1],[I+2]
+	; Fx33
+	push	hl
+	dec	hl
+	call	readRegisterA
+	ld	b,(hl)
+	ld	hl,(registerI)
+	ld	de,(baseAddress)
+	add	hl,de
+	ld	(hl),-1
+	inc	hl
+	ld	(hl),9
+	inc	hl
+	ld	(hl),9
+	inc	b
+FX2a:	ld	a,(hl)
+	inc	a
+	cp	10
+	jr	nz,FX2b
+	dec	hl
+	ld	a,(hl)
+	inc	a
+	cp	10
+	jr	nz,FX2c
+	dec	hl
+	inc	(hl)
+	inc	hl
+	xor	a
+FX2c:	ld	(hl),a
+	inc	hl
+	xor	a
+FX2b:	ld	(hl),a
+	djnz	FX2a
+	pop	hl
+	inc	hl
+	jp	main
+FX3:	cp	$15
+	jr	nz,FX4
+	; set delay timer
+	push	hl
+	dec	hl
+	call	readRegisterA
+	ld	a,(hl)
+	ld	(delayTimer),a
+	pop	hl
+	inc	hl
+	jp	main
+FX4:	cp	$18
+	jr	nz,FX5
+	; Set Soundtimer
+	dec	hl
+	ld	a,(hl)
+	and	15
+	ex	de,hl
+	ld	c,a
+	ld	b,0
+	ld	hl,registers
+	add	hl,bc
+	ld	a,(hl)
+	ld	(soundTimer),a
+	ex	de,hl
+	inc	hl
+	inc	hl
+	jp	main
+FX5:	cp	$07
+	jr	nz,FX6
+	; set Vx=delay timer
+	push	hl
+	dec	hl
+	call	readRegisterA
+	ld	a,(delayTimer)
+	ld	(hl),a
+	pop	hl
+	inc	hl
+	jp	main
+FX6:	cp	$0A
+	jr	nz,FX7
+	; wait for key press, store code in Vx
+	ex	de,hl
+FX6a:	ld	a,($8001)
+	ld	h,0
+	ld	l,a
+	sub	54
+	jp	z,startOver
+	dec	a
+	call	z,pause
+	dec	a
+	jp	z,restart
+	ld	bc,keycodes
+	add	hl,bc
+	ld	a,(hl)
+	cp	$10
+	jr	z,FX6a
+	ld	i,a
+	dec	de
+	ld	a,(de)
+	call	readRegister
+	ld	a,i
+	ld	(hl),a
+	ld	b,25
+FX6b:	ei
+	halt
+	djnz	FX6b
+	ex	de,hl
+	inc	hl
+	inc	hl	
+	jp	main
+FX7:	cp	$65
+	jr	nz,FX8
+	; Read V0 to Vx from [I] to [I+x]
+	push	hl
+	dec	hl
+	ld	a,(hl)
+	and	%00001111
+	ld	c,a
+	ld	hl,(registerI)
+	ld	de,(baseAddress)
+	add	hl,de
+	ld	de,registers
+FX7a:	inc	c
+	ld	b,0
+	ld	a,c
+	ldir
+	ld	c,a
+	ld	hl,(registerI)
+	add	hl,bc
+	dec	hl
+	ld	(registerI),hl
+	pop	hl
+	inc	hl
+	jp	main
+FX8:	cp	$55
+	jr	nz,FX9
+	; Store V0 to Vx in [I] to [I+x]
+	push	hl
+	dec	hl
+	ld	a,(hl)
+	and	%00001111
+	ld	c,a
+	ld	hl,(registerI)
+	ld	de,(baseAddress)
+	add	hl,de
+	ld	de,registers
+	ex	de,hl
+	jr	FX7a
+FX9:	;cp	$29
+	;jr	nz,FXA
+	; Set I to 5 byte sprite for value in Vx
+	dec	hl
+	ld	a,(hl)
+	ex	de,hl
+	call	readRegister
+	ld	a,(hl)
+	add	a,a	; x2
+	add	a,(hl)	; x3
+	add	a,(hl)	; x4
+	add	a,(hl)	; x5
+	ld	c,a
+	ld	hl,numericSprites
+	add	hl,bc
+	ld	bc,(baseAddress)
+	sbc	hl,bc
+	ld	(registerI),hl
+	ex	de,hl
+	inc	hl
+	inc	hl
+	jp	main
+
+; System instructions (0nnn)
+group0:	inc	hl
+	ld	a,(hl)
+	cp	$EE
+	jr	nz,group0_cls
+	; Return
+	ld	hl,(stackPointer)
+	dec	hl
+	ld	d,(hl)
+	dec	hl
+	ld	e,(hl)
+	ld	(stackPointer),hl
+	ex	de,hl
+	jp	main
+group0_cls:
+	cp	$E0
+	jr	nz,invalid	; exit in unrecognized $0xxx instruction
+	call	setScreen
+	inc	hl
+	jp	main
+
+
+invalid:
+	ld	hl,invalid_text
+	jr	error
+stackError:
+	ld	hl,stack_text
+error:	push	hl
+	call	clrscr
+	call	homeup
+	pop	hl
+	call	puts
+	call	getk
+errorLoop:
+	call	getk
+	or	a
+	jr	z,errorLoop
+	jp	restart
+invalid_text:
+	.db	"Invalid",0
+stack_text:
+	.db	"Stack",0
+
+
+; Jump to address
+group1:	ld	a,(hl)
+	and	%00001111
+	ld	d,a
+	inc	hl
+	ld	e,(hl)
+	ld	hl,(baseAddress)
+	add	hl,de
+	jp	main
+
+; Call address
+group2:	ld	a,(hl)
+	and	%00001111
+	ld	b,a
+	inc	hl
+	ld	c,(hl)
+	inc	hl
+	ex	de,hl
+	ld	hl,(stackPointer)
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	inc	hl
+	ld	(stackPointer),hl
+	ld	hl,(baseAddress)
+	add	hl,bc
+	jp	main
+
+; Skip next instruction if register x is equal to value b
+group3:	ld	a,(hl)
+	ex	de,hl
+	call	readRegister
+	ld	a,(hl)
+	ex	de,hl
+	inc	hl
+	cp	(hl)
+	inc	hl
+	jp	nz,main
+	inc	hl
+	inc	hl
+	jp	main
+
+; Skip next instruction if register x in not equal to value b
+group4:	ld	a,(hl)
+	ex	de,hl
+	call	readRegister
+	ld	a,(hl)
+	ex	de,hl
+	inc	hl
+	cp	(hl)
+	inc	hl
+	jp	z,main
+	inc	hl
+	inc	hl
+	jp	main
+
+
+; Skip next instruction if register x is equal to register y
+group5:	push	hl
+	call	readRegisterA
+	ex	de,hl
+	pop	hl
+	inc	hl
+	push	hl
+	ld	a,(hl)
+	call	readRegisterHigh
+	ld	a,(hl)
+	ex	de,hl
+	cp	(hl)
+	pop	hl
+	inc	hl
+	jp	nz,main
+	inc	hl
+	inc	hl
+	jp	main
+
+; Load register x with byte b (6xkk)
+group6:	ld	a,(hl)
+	ex	de,hl
+	call	readRegister
+	ex	de,hl
+	inc	hl
+	ld	a,(hl)
+	ld	(de),a
+	inc	hl
+	jp	main
+
+; Add register x with byte b
+group7:	ld	a,(hl)
+	ex	de,hl
+	call	readRegister
+	ld	a,(hl)
+	ex	de,hl
+	inc	hl
+	add	a,(hl)
+	ld	(de),a
+	inc	hl
+	jp	main
+
+group8:	ld	a,(hl)
+	and	%00001111
+	ld	c,a
+	ld	b,0
+	ld	ix,registers
+	add	ix,bc		; ix->registerA
+	inc	hl
+	ld	a,(hl)
+	ex	de,hl
+	call	readRegisterHigh
+	ld	a,(hl)
+	push	af
+	ld	hl,group8_table
+	ld	a,(de)
+	and	%00000111
+	ld	c,a
+	add	hl,bc
+	ld	a,(hl)
+	ld	l,a
+	ld	h,b
+	ld	bc,group8_off
+	add	hl,bc
+	pop	af
+	ld	bc,group8_cont
+	push	bc
+	jp	(hl)
+group8_cont:
+	ld	(ix),a
+	ld	a,1
+	jr	c,group8_c
+	xor	a
+group8_c:
+	ld	(registerF),a
+	ex	de,hl
+	inc	hl
+	jp	main
+
+group8_table:
+	.db	load_RR-group8_off	; 8xx0 000
+	.db	or_RR-group8_off	; 8xx1 001
+	.db	and_RR-group8_off	; 8xx2 010
+	.db	xor_RR-group8_off	; 8xx3 011
+	.db	add_RR-group8_off	; 8xx4 100
+	.db	sub_RR-group8_off	; 8xx5 101
+	.db	shr_RR-group8_off	; 8xx6 110	(also shl_RR if $0E)
+	.db	subn_RR-group8_off	; 8xx7 111
+
+group8_off:
+load_RR:
+	ret
+or_RR:	or	(ix)
+	ret
+and_RR:	and	(ix)
+	ret
+xor_RR:	xor	(ix)
+	ret
+add_RR:	add	a,(ix)
+	ret
+sub_RR:	neg
+	add	a,(ix)
+	ret
+shr_RR:	ld	a,(de)
+	bit	3,a
+	jr	nz,shl_RR
+	ld	a,(ix)
+	rra
+	ret
+shl_RR:	ld	a,(ix)
+	rla
+	ret
+subn_RR:
+	sub	(ix)
+	ccf
+	ret
+
+
+; skip next instruction if register x is not equal to register y
+group9:	push	hl
+	call	readRegisterA
+	ex	de,hl
+	pop	hl
+	inc	hl
+	push	hl
+	ld	a,(hl)
+	call	readRegisterHigh
+	ld	a,(hl)
+	ex	de,hl
+	cp	(hl)
+	pop	hl
+	inc	hl
+	jp	z,main
+	inc	hl
+	inc	hl
+	jp	main
+
+; Load register I with word
+groupA:	ld	a,(hl)
+	and	%00001111
+	ld	d,a
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	(registerI),de
+	jp	main
+
+; Jump to address + register0
+groupB:	ld	a,(hl)
+	and	%00001111
+	ld	d,a
+	inc	hl
+	ld	e,(hl)
+	ld	hl,(registers)
+	ld	h,0
+	add	hl,de
+	ld	de,(baseAddress)
+	add	hl,de
+	jp	main
+
+; register x = random number & byte
+groupC:	ld	a,r
+	rra
+	ld	bc,(randomNum)
+	add	a,c
+	ld	(randomNum),a
+	ld	a,(hl)
+	and	%00001111
+	push	hl
+	ld	e,a
+	ld	d,0
+	ld	hl,registers
+	add	hl,de
+	ex	de,hl
+	pop	hl
+	inc	hl
+	ld	a,(hl)
+	and	c
+	ld	(de),a
+	inc	hl
+	jp	main
+
+; Draw sprite stored at [I] to Vx,Vy with hight N (#DXYN)
+groupD:	ld	a,(hl)
+	ex	de,hl
+	call	readRegister
+	ld	a,(hl)
+	and	63
+	ld	i,a		; x coordinate in i
+	inc	de
+	ld	a,(de)
+	call	readRegisterHigh
+	ld	a,(hl)		; y coordinate in c
+	and	31
+	add	a,(64/2)-(32/2)
+	ld	c,a
+	ex	de,hl
+	ld	ix,(registerI)	; pointer in ix
+	ld	de,(baseAddress)
+	add	ix,de
+	ld	a,(hl)
+	and	%00001111
+	ld	b,a
+	push	hl
+	xor	a
+	ld	(registerF),a
+	ld	h,a
+	ld	l,c
+	ld	e,l
+	ld	c,0
+	ld	a,i
+	cp	64-8
+	jr	c,sl0a
+	ld	c,$FF
+sl0a:	add	a,(96/2)-(64/2)
+	ld	d,h
+	add	hl,de
+	add	hl,de
+	add	hl,hl
+	add	hl,hl
+	ld	e,a
+	and	7
+	ld	i,a
+	srl	e
+	srl	e
+	srl	e
+	add	hl,de
+	ld	de,gbuf
+	add	hl,de
+sl1:	ld	d,(ix)
+	ld	e,$00
+	ld	a,i
+	or	a
+	jr	z,sl3
+sl2:	srl	d
+	rr	e
+	dec	a
+	jr	nz,sl2
+sl3:	ld	a,(hl)
+	and	d
+	call	nz,setCarry
+	ld	a,(hl)
+	xor	d
+	ld	(hl),a
+	inc	hl
+	ld	a,c
+	or	a
+	jr	nz,sl4
+	ld	a,(hl)
+	and	e
+	call	nz,setCarry
+	ld	a,(hl)
+	xor	e
+	ld	(hl),a
+sl4:	ld	de,11
+	add	hl,de
+	ex	de,hl
+	ld	hl,gbuf+((32+16)*12)
+	sbc	hl,de
+	jr	c,sl5
+	ex	de,hl
+	inc	ix
+	djnz	sl1
+sl5:	call	vector0
+	ei
+	pop	hl
+	inc	hl
+	jp	main
+setCarry:
+	ld	a,1
+	ld	(registerF),a
+	ret
+
+groupE:	inc	hl
+	ld	a,(hl)
+	cp	$9E
+	jr	nz,skipKey2
+	; Skip next instruction if key Vx is down.
+	call	checkKey
+	jp	nz,main
+	inc	hl
+	inc	hl
+	jp	main
+skipKey2:
+	; Skip next instruction if key Vx is up.
+	call	checkKey
+	jp	z,main
+	inc	hl
+	inc	hl
+	jp	main
+
+checkKey:
+	dec	hl
+	ld	a,(hl)
+	inc	hl
+	ex	de,hl
+	call	readRegister
+	ld	a,(hl)
+	ld	bc,($8001)
+	ld	b,0
+	ld	hl,keycodes
+	add	hl,bc
+	cp	(hl)
+	ex	de,hl
+	inc	hl
+	ret
+
+setScreen:
+	push	hl
+	call	clrgbuf
+	ld	hl,0
+	ld	(pencol),hl
+	ld	hl,(file)
+	ld	b,8
+	call	vputsn
+	ld	hl,50*256+15
+	ld	(pencol),hl
+	ld	hl,help
+	call	vputs
+	ld	bc,14*256+14
+	ld	de,81*256+14
+	call	dark_line
+	ld	de,14*256+49
+	call	dark_line
+	ld	c,49
+	ld	d,81
+	call	dark_line
+	ld	b,81
+	ld	e,14
+	call	dark_line
+	call	bufcopy		; in case the game takes a long time to load
+	pop	hl
+	ret
+
+exit:	call	setTemp
+	call	chksysvar
+	jp	nc,delvar
+;	ret			; falling though to next routine won't hurt
+
+setTemp:
+	ld	hl,temp_file
+	ld	de,op1
+	ld	bc,8
+	ldir
+	ret
+
+readRegisterA:
+	ld	a,(hl)
+readRegister:
+	and	%00001111
+readRegister_skip:
+	ld	b,0
+	ld	c,a
+	ld	hl,registers
+	add	hl,bc
+	ret
+
+readRegisterHigh:
+	and	%11110000
+	rra
+	rra
+	rra
+	rra
+	jr	readRegister_skip
+
+pause:	push	hl
+	ld	a,1
+	out	(3),a
+	ei
+	halt
+	ld	b,50
+pauseLoop:
+	halt
+	djnz	pauseLoop
+	xor	a
+	pop	hl
+	ret
+
+detect_string:
+	.db	"Chip8",0
+info:	.db	"by Joe Wingbermuehle",0
+	.db	"Program:",0
+	.db	"2nd - Start",0
+	.db	"ALPHA - Select",0
+	.db	"DEL - Exit",0
+help:	.db	"2nd : MODE : DEL",0
+
+keycodes:
+	.db	$10,$10,$10,$10,$10,$10,$10,$10,$10,$10
+	.db	$0F,$0E,$0D,$0C,$10,$10,$10,$0B,$09,$06
+	.db	$03,$10,$10,$10,$10,$00,$08,$05,$02,$10
+	.db	$10,$10,$10,$0A,$07,$04,$01,$10,$10,$10
+	.db	$10,$10,$10,$10,$10,$10,$10,$10,$10,$10
+
+numericSprites:
+	.db	%11110000	; 0
+	.db	%10010000
+	.db	%10010000
+	.db	%10010000
+	.db	%11110000
+	.db	%00010000	; 1
+	.db	%00010000
+	.db	%00010000
+	.db	%00010000
+	.db	%00010000
+	.db	%11110000	; 2
+	.db	%00010000
+	.db	%11110000
+	.db	%10000000
+	.db	%11110000
+	.db	%11110000	; 3
+	.db	%00010000
+	.db	%11110000
+	.db	%00010000
+	.db	%11110000
+	.db	%10010000	; 4
+	.db	%10010000
+	.db	%11110000
+	.db	%00010000
+	.db	%00010000
+	.db	%11110000	; 5
+	.db	%10000000
+	.db	%11110000
+	.db	%00010000
+	.db	%11110000
+	.db	%10000000	; 6
+	.db	%10000000
+	.db	%11110000
+	.db	%10010000
+	.db	%11110000
+	.db	%11110000	; 7
+	.db	%00010000
+	.db	%00010000
+	.db	%00010000
+	.db	%00010000
+	.db	%11110000	; 8
+	.db	%10010000
+	.db	%11110000
+	.db	%10010000
+	.db	%11110000
+	.db	%11110000	; 9
+	.db	%10010000
+	.db	%11110000
+	.db	%00010000
+	.db	%00010000
+	.db	%01100000	; A
+	.db	%10010000
+	.db	%11110000
+	.db	%10010000
+	.db	%10010000
+	.db	%11100000	; B
+	.db	%10010000
+	.db	%11100000
+	.db	%10010000
+	.db	%11100000
+	.db	%01100000	; C
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%01100000
+	.db	%11100000	; D
+	.db	%10010000
+	.db	%10010000
+	.db	%10010000
+	.db	%11100000
+	.db	%11110000	; E
+	.db	%10000000
+	.db	%11100000
+	.db	%10000000
+	.db	%11110000
+	.db	%11110000	; F
+	.db	%10000000
+	.db	%11100000
+	.db	%10000000
+	.db	%10000000
+
+
+.end
+END
