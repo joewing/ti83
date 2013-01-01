@@ -1,0 +1,1184 @@
+; Orbix v2.0 by Joe Wingbermuehle 19990824
+; http://joewing.calc.org
+
+	.nolist
+	#include	"ion.inc"
+	.list
+
+#ifdef TI83P
+	.org	progstart-2
+	.db	$BB,$6D
+#else
+	.org	progstart
+#endif
+
+#define	storage		sram	; Variables stored in APD RAM (768 bytes)
+
+;-< Variables >-+---------------+-------------------------------+-------+
+; Name		| Location	| Description			| Size	|
+;---------------+---------------+-------------------------------+-------+
+board		=storage	; Board data (8*8)		| 64	|
+playerx		=storage+64	; Player x-Coordinate (0-7)	| 1	|
+playery		=storage+65	; Player y-Coordinate (0-7)	| 1	|
+playerCount	=storage+66	; Select sprite number (0-3)	| 1	|
+level		=storage+67	; Level number			| 1	|
+timer		=storage+68	; Timer for moving cursor	| 1	|
+fillRight	=storage+69	; Amount to fill right		| 1	|
+fillLeft	=storage+70	; Amount to fill left		| 1	|
+fillDown	=storage+71	; Amount to fill down		| 1	|
+fillUp		=storage+72	; Amount to fill up		| 1	|
+fillFlag	=storage+73	; Move possible?		| 1	|
+tempBoard	=storage+74	; Temporary board data (8*8)	| 64	|
+moveData	=storage+138	; Data for computer's move (8*8)| 64	|
+computerx	=storage+202	; Computer x-coordinate		| 1	|
+computery	=storage+203	; Computer y-coordinate		| 1	|
+playerScore	=storage+204	; Player's score		| 2	|
+computerScore	=storage+206	; Computer's score		| 2	|
+playerTemp	=storage+208	; temp value for player's score	| 2	|
+computerTemp	=storage+210	; temp val for computer's score	| 2	|
+;---------------+---------------+-------------------------------+-------+
+;							Total:	  212	|
+;---------------+---------------+-------------------------------+-------+
+; board is set up as follows:	| tempBoard is used so the the TI-83	|
+; 0 = nothing			| can go through all it's possiblities	|
+; 1 = block			| without disturbing the actual board.	|
+; 2 = computer piece		| moveData saves the "score" of each of	|
+; 3 = player piece		| the TI-83's possible moves.		|
+;-------------------------------+---------------------------------------+
+
+;---------= Ion Header =---------
+veryBeginning:
+	ret
+	jr	nc,start_of_program
+	.db	"Orbix v2.0",0
+highScore:
+	.dw	0
+
+;---------= Program Code =---------
+start_of_program:
+;-----> Initialize the variables
+	ld	(playerCount),a	; reset select sprite to 0
+	inc	a
+	ld	(level),a	; start on level 1
+	sbc	hl,hl
+	ld	(playerx),hl	; load playerx and playery with 0
+	ld	(playerScore),hl
+	ld	(computerScore),hl
+;---------= Setup Game Board =---------
+setupBoard:
+	ld	hl,(level)
+	ld	h,0
+	dec	l
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	de,level_data
+	add	hl,de
+	ld	de,board
+	ld	bc,8*256+1
+	call	ionDecompress	; decompress/load current Level
+	ld	a,2
+	ld	(board+(3*8)+4),a
+	ld	(board+(4*8)+3),a
+	inc	a
+	ld	(board+(3*8)+3),a
+	ld	(board+(4*8)+4),a
+	bcall(_cleargbuf)
+	call	drawBoard
+	ld	bc,8*256+4
+	ld	ix,picture
+	ld	a,65
+	ld	l,0
+	call	ionLargeSprite
+	set	7,(iy+20)
+	ld	hl,9*256+66
+	ld	(pencol),hl
+	ld	hl,info
+	bcall(_vputs)
+	ld	de,17*256+66
+	ld	(pencol),de
+	bcall(_vputs)
+	push	hl
+	ld	a,(level)
+	bcall(_setxxop1)
+	ld	a,2
+	bcall(_dispop1a)
+	pop	hl
+	ld	de,23*256+66
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,35*256+66
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,50*256+66
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	hl,56*256+66
+	ld	(pencol),hl
+	ld	hl,(highScore)
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,5
+	bcall(_dispop1a)
+	ld	bc,65*256+(63-16)
+	ld	de,95*256+(63-16)
+	bcall(_darkline)
+	ld	bc,65*256+(63-48)
+	ld	de,95*256+(63-48)
+	bcall(_darkline)
+	ld	bc,
+	ld	bc,64*256+0
+	ld	de,64*256+63
+	bcall(_darkline)
+	call	toggleCursor	; turn the cursor on for the first time!
+
+;---------= Main Loop =---------
+startGame:
+enterLoop:
+	call	checkForWinner
+main:	bcall(_copygbuf)
+	ld	a,(timer)
+	dec	a
+	and	%00000111
+	ld	(timer),a
+	call	z,updateCursor
+	bcall(_getk)
+	dec	a
+	jp	z,movDown
+	dec	a
+	jp	z,movLeft
+	dec	a
+	jp	z,movRight
+	dec	a
+	jp	z,movUp
+	cp	54-4		; [2nd]
+	jp	z,movSelect
+	cp	56-4		; [DEL]
+	jr	nz,main
+
+;	call	getkey		; for screen shot
+
+	jp	gameOver	; exit Othello
+
+;---------= Select a block =---------
+movSelect:
+;-----> First check if it's possible & get amount to fill in each direction
+	call	checkPlayerMove
+	ld	a,(fillFlag)
+	or	a
+	jp	z,main
+	push	ix
+	call	drawBoard	; turn off the board
+	pop	hl
+;-----> Now fill the spaces
+	ld	(hl),3
+;-----> Fill right
+	ld	a,(fillRight)
+	or	a
+	jr	z,movSelectS5
+	ld	b,a
+	push	hl
+movSelectL5:
+	inc	hl
+	ld	(hl),3
+	djnz	movSelectL5
+	pop	hl
+movSelectS5:
+;-----> Fill left
+	ld	a,(fillLeft)
+	or	a
+	jr	z,movSelectS6
+	ld	b,a
+	push	hl
+movSelectL6:
+	dec	hl
+	ld	(hl),3
+	djnz	movSelectL6
+	pop	hl
+movSelectS6:
+;-----> Fill down
+	ld	a,(fillDown)
+	or	a
+	jr	z,movSelectS7
+	ld	de,8
+	ld	b,a
+	push	hl
+movSelectL7:
+	add	hl,de
+	ld	(hl),3
+	djnz	movSelectL7
+	pop	hl
+movSelectS7:
+;-----> Fill up
+	ld	a,(fillUp)
+	or	a
+	jr	z,movSelectS8
+	ld	de,-8
+	ld	b,a
+movSelectL8:
+	add	hl,de
+	ld	(hl),3
+	djnz	movSelectL8
+movSelectS8:
+;-----> Draw the updated board
+; The computer takes a moment to move, so showing the player's
+; move before making computer's move adds a nice effect.
+	call	drawBoard	; turn the board on
+takeComputerTurn:
+	bcall(_copygbuf)
+	call	drawBoard	; turn the board off again
+	call	checkForWinner
+
+;-------= Calculator's Turn! =---------
+takeTurn:
+	ld	hl,moveData
+	ld	(hl),0
+	ld	de,moveData+1
+	ld	bc,64
+	ldir			; set all possible moves to a score of 0
+
+;-----> Move through all possible moves
+	xor	a
+	ld	(computerx),a
+	ld	(computery),a
+	ld	b,64
+	ld	hl,board
+takeTurnL1:
+	push	bc
+	push	hl
+	ld	a,(hl)			; check if possible
+	or	a
+	jr	nz,takeTurnNext
+	ld	hl,board	; clear the tempBoard
+	ld	de,tempBoard
+	ld	bc,64
+	ldir
+	call	checkComputerMove	; check if possible again
+	jr	nz,takeTurnNext
+	call	takeComputerMove
+	inc	a
+	pop	hl
+	push	hl
+	ld	de,moveData-board
+	add	hl,de
+	bit	7,a
+	jr	z,takeTurnS1
+	ld	a,1
+takeTurnS1:
+	ld	(hl),a
+takeTurnNext:
+	ld	a,(computerx)
+	inc	a
+	cp	8
+	jr	nz,takeTurnNextS1
+	ld	a,(computery)
+	inc	a
+	ld	(computery),a
+	xor	a
+takeTurnNextS1:
+	ld	(computerx),a
+	pop	hl
+	pop	bc
+	inc	hl		; move to next space
+	djnz	takeTurnL1
+;-----> Find best move
+	ld	de,0
+	ld	(computerx),de
+	ld	hl,moveData
+	ld	bc,64*256+0
+selectBestL1:
+	ld	a,(hl)
+	cp	c
+	jr	c,selectBestS1
+	ld	de,(computerx)
+	ld	c,a
+selectBestS1:
+	ld	a,(computerx)
+	inc	a
+	cp	8
+	jr	nz,selectBestS2
+	ld	a,(computery)
+	inc	a
+	ld	(computery),a
+	xor	a
+selectBestS2:
+	ld	(computerx),a
+	inc	hl
+	djnz	selectBestL1
+
+;-----> Take best move
+	ld	a,c
+	or	a
+	jp	z,noMovesPossible	; if no possible moves, give the player a chance
+	ld	(computerx),de
+	ld	hl,board
+	ld	de,tempBoard
+	ld	bc,64
+	push	bc
+	push	de
+	push	hl
+	ldir
+	call	takeComputerMove
+	pop	de
+	pop	hl
+	pop	bc
+	ldir
+noMovesPossible:
+;-----> Now draw the new board
+	call	drawBoard
+;-----> Check if the player can move
+	ld	b,64
+	ld	hl,(playerx)
+	ld	(computerx),hl
+	ld	hl,$0000
+	ld	(playerx),hl
+checkGameOver:
+	push	bc
+	call	checkPlayerMove
+	pop	bc
+	ld	a,(fillFlag)
+	or	a
+	jr	nz,continueGame
+	ld	a,(playerx)
+	inc	a
+	cp	8
+	jr	nz,checkGameOverS
+	ld	hl,playery
+	inc	(hl)
+	xor	a
+checkGameOverS:
+	ld	(playerx),a
+	djnz	checkGameOver
+	ld	hl,(computerx)
+	ld	(playerx),hl
+	jp	takeComputerTurn
+continueGame:
+	ld	hl,(computerx)
+	ld	(playerx),hl
+	jp	enterLoop
+
+;---------= Move Down =---------
+movDown:
+	call	toggleCursor
+	ld	a,(playery)
+	inc	a
+	and	%00000111
+	ld	(playery),a
+	jr	moveFinished
+
+;---------= Move Left =---------
+movLeft:
+	call	toggleCursor
+	ld	a,(playerx)
+	dec	a
+	and	%00000111
+	ld	(playerx),a
+moveFinished:
+	call	toggleCursor
+	jp	main
+
+;---------= Move Right =---------
+movRight:
+	call	toggleCursor
+	ld	a,(playerx)
+	inc	a
+	and	%00000111
+	ld	(playerx),a
+	jr	moveFinished
+
+;---------= Move Up =---------
+movUp:	call	toggleCursor
+	ld	a,(playery)
+	dec	a
+	and	%00000111
+	ld	(playery),a
+	jr	moveFinished
+
+;---------= Toggle Cursor =--------
+; Turns the cursor on/off
+toggleCursor:
+	ld	bc,(playerCount-1)
+	inc	b
+	ld	ix,selectSprites-8
+	ld	de,8
+toggleCursorL1:
+	add	ix,de
+	djnz	toggleCursorL1
+	ld	b,8
+	ld	a,(playery)
+	add	a,a
+	add	a,a
+	add	a,a
+	ld	l,a
+	ld	a,(playerx)
+	add	a,a
+	add	a,a
+	add	a,a
+	jp	ionPutSprite	; draw the cursor & return
+
+;---------= Update Cursor =---------
+; Change cursor sprite to make it appear
+; to be moving.
+updateCursor:
+	call	toggleCursor	; turn the cursor off
+	ld	a,(playerCount)
+	inc	a
+	and	%00000011
+	ld	(playerCount),a
+	jp	toggleCursor	; turn cursor back on & return
+
+;---------= Player Won =---------
+playerWon:
+	ld	a,(level)
+	inc	a
+	ld	(level),a
+	cp	number_of_levels+1
+	jp	nz,setupBoard
+	ld	hl,won_text
+endIt:	ld	de,0*256+3
+	ld	(currow),de
+	bcall(_puts)
+	ld	hl,(playerScore)
+	ld	de,(highScore)
+	call	hiScore
+	ld	(highScore),hl
+	ld	hl,0*256+4
+	ld	(currow),hl
+	ld	hl,nhs_text
+	jr	nz,waitKey1
+	bcall(_puts)
+waitKey1:
+	bcall(_getk)
+	or	a
+	jr	nz,waitKey1
+waitKey2:
+	bcall(_getk)
+	or	a
+	jr	z,waitKey2
+	ret
+
+;---------= Player Lost =---------
+gameOver:
+	ld	hl,(playerScore)
+	ld	de,(playerTemp)
+	add	hl,de
+	ld	(playerScore),hl
+	ld	hl,lost_text
+	jr	endIt
+
+;---------= Get matrix element =----------
+; input: h=y, l=x
+; output: hl->element, a=element
+getElement:
+	ld	b,h
+	ld	a,l
+	ld	hl,-8
+	ld	de,8
+	inc	b
+getElementL1:
+	add	hl,de
+	djnz	getElementL1
+	ld	e,a
+	ld	d,b
+	add	hl,de
+	ld	de,tempBoard
+	add	hl,de
+	ret
+
+;---------= Draw the board =---------
+drawBoard:
+; For the outside loop:
+; hl->current block in level_data
+; d=outside count, e=y coordinate
+; b=inside count, c=x coordinate
+	ld	hl,board
+	ld	de,8*256+0
+drawBoardL2:
+	ld	bc,8*256+0
+drawBoardL3:
+	push	bc
+	push	de
+	push	hl
+	ld	b,(hl)
+	ld	l,e	; l=y coordinate
+	ld	a,c	; a=x coordinate
+	inc	b
+	ld	ix,boardPieces-8
+	ld	de,8
+drawBoardL4:
+	add	ix,de
+	djnz	drawBoardL4	; ix->piece
+	ld	b,8		; height of sprite is 8
+	call	ionPutSprite	; draw the sprite
+	pop	hl
+	pop	de
+	pop	bc
+	inc	hl	; point to next piece in matrix
+	ld	a,c
+	add	a,8
+	ld	c,a
+	djnz	drawBoardL3
+	ld	a,e
+	add	a,8
+	ld	e,a
+	dec	d
+	jr	nz,drawBoardL2
+	ret
+
+;---------= Check if player move is possible =---------
+; Input: playerx,playery,board
+; Output: z=1 if possible,fillFlag,fillRight
+;		fillLeft,fillUp,fillDown
+checkPlayerMove:
+	xor	a
+	ld	(fillFlag),a
+	sbc	hl,hl
+	ld	(fillRight),hl
+	ld	(fillDown),hl
+	ld	hl,(playerx)
+	call	getElement
+	ld	de,board-tempBoard
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	ret	nz
+;-----> Check right
+	push	hl		; the element will be stored in ix
+	pop	ix
+	ld	bc,(playerx)
+movSelectL1:
+	ld	a,c
+	cp	7
+	jr	z,movSelectS1
+	inc	hl
+	ld	a,(hl)		; empty
+	or	a
+	jr	z,movSelectS1
+	dec	a		; X
+	jr	z,movSelectS1
+	cp	3-1		; player
+	call	z,movPossible1
+	inc	c
+	jr	movSelectL1
+movSelectS1:
+	push	ix
+	pop	hl
+;-----> Check left
+	ld	bc,(playerx)
+movSelectL2:
+	ld	a,c
+	or	a
+	jr	z,movSelectS2
+	dec	hl
+	ld	a,(hl)
+	or	a
+	jr	z,movSelectS2
+	dec	a
+	jr	z,movSelectS2
+	cp	3-1
+	call	z,movPossible2
+	dec	c
+	jr	movSelectL2
+movSelectS2:
+	push	ix
+	pop	hl
+;-----> Check down
+	ld	de,8
+	ld	bc,(playery)
+movSelectL3:
+	ld	a,c
+	cp	7
+	jr	z,movSelectS3
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	jr	z,movSelectS3
+	dec	a
+	jr	z,movSelectS3
+	cp	3-1
+	call	z,movPossible3
+	inc	c
+	jr	movSelectL3
+movSelectS3:
+	push	ix
+	pop	hl
+;-----> Check up
+	ld	de,-8
+	ld	bc,(playery)
+movSelectL4:
+	ld	a,c
+	or	a
+	ret	z
+	add	hl,de
+	ld	a,(hl)
+	or	a	
+	ret	z
+	dec	a
+	ret	z
+	cp	3-1
+	call	z,movPossible4
+	dec	c
+	jr	movSelectL4
+	ret
+
+;-----> Routines needed for player's selection
+movPossible1:
+	ld	a,(playerx)
+	ld	b,a
+	ld	a,c
+	sub	b
+	ld	(fillRight),a
+	jr	movPossible
+movPossible2:
+	ld	a,(playerx)
+	sub	c
+	ld	(fillLeft),a
+	jr	movPossible
+movPossible3:
+	ld	a,(playery)
+	ld	b,a
+	ld	a,c
+	sub	b
+	ld	(fillDown),a
+	jr	movPossible
+movPossible4:
+	ld	a,(playery)
+	sub	c
+	ld	(fillUp),a
+movPossible:
+	ld	a,1
+	ld	(fillFlag),a
+	pop	hl	; get return data from stack
+	inc	hl	; skip inc/dec c
+	inc	hl	;\ skip jr xx
+	inc	hl	;/
+	jp	(hl)	; "return"
+
+;---------= Check if Computer move is possible =---------
+; Input: computerx,computery,tempBoard
+; Output: z=1 if possible
+checkComputerMove:
+	ld	hl,(computerx)
+	call	getElement
+	push	hl
+	pop	ix
+	ld	bc,(computerx)
+checkRight:
+	ld	a,c
+	cp	7
+	jr	z,checkRightS
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jr	z,checkRightS
+	dec	a
+	jr	z,checkRightS
+	dec	a
+	jr	z,checkComputerYes
+	inc	c
+	jr	checkRight
+checkRightS:
+	push	ix
+	pop	hl
+	ld	bc,(computerx)
+checkLeft:
+	ld	a,c
+	or	a
+	jr	z,checkLeftS
+	dec	hl
+	ld	a,(hl)
+	or	a
+	jr	z,checkLeftS
+	dec	a
+	jr	z,checkLeftS
+	dec	a
+	jr	z,checkComputerYes
+	dec	c
+	jr	checkLeft
+checkLeftS:
+	push	ix
+	pop	hl
+	ld	bc,(computery)
+	ld	de,8
+checkDown:
+	ld	a,c
+	cp	7
+	jr	z,checkDownS
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	jr	z,checkDownS
+	dec	a
+	jr	z,checkDownS
+	dec	a
+	jr	z,checkComputerYes
+	inc	c
+	jr	checkDown
+checkDownS:
+	push	ix
+	pop	hl
+	ld	bc,(computery)
+	ld	de,-8
+checkUp:
+	ld	a,c
+	or	a
+	jr	z,checkUpS
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	jr	z,checkUpS
+	dec	a
+	jr	z,checkUpS
+	dec	a
+	jr	z,checkComputerYes
+	dec	c
+	jr	checkUp
+checkUpS:
+	xor	a
+	inc	a
+	ret
+checkComputerYes:
+	xor	a
+	ret
+
+;---------= Take Computer Move =---------
+; Input: computerx,computery,tempBoard
+; Output: tempBoard, a=good-bad moves
+takeComputerMove:
+	ld	hl,(computerx)
+	call	getElement
+	ld	(hl),2
+	push	hl
+	pop	ix
+	ld	bc,(computerx)
+	ld	b,0
+moveRightL1:
+	ld	a,c
+	cp	7
+	jr	z,moveRightS2
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jr	z,moveRightS2
+	dec	a
+	jr	z,moveRightS2
+	dec	a
+	jr	z,moveRightS1
+	inc	b
+	inc	c
+	jr	moveRightL1
+moveRightS1:
+	push	ix
+	pop	hl
+	ld	a,b
+	or	a
+	jr	z,moveRightS2
+moveRightL2:
+	inc	hl
+	ld	(hl),2
+	djnz	moveRightL2
+moveRightS2:
+	push	ix
+	pop	hl
+	ld	bc,(computerx)
+	ld	b,0
+moveLeftL1:
+	ld	a,c
+	or	a
+	jr	z,moveLeftS2
+	dec	hl
+	ld	a,(hl)
+	or	a
+	jr	z,moveLeftS2
+	dec	a
+	jr	z,moveLeftS2
+	dec	a
+	jr	z,moveLeftS1
+	inc	b
+	dec	c
+	jr	moveLeftL1
+moveLeftS1:
+	push	ix
+	pop	hl
+	ld	a,b
+	or	a
+	jr	z,moveLeftS2
+moveLeftL2:
+	dec	hl
+	ld	(hl),2
+	djnz	moveLeftL2
+moveLeftS2:
+	push	ix
+	pop	hl
+	ld	de,8
+	ld	bc,(computery)
+	ld	b,0
+moveDownL1:
+	ld	a,c
+	cp	7
+	jr	z,moveDownS2
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	jr	z,moveDownS2
+	dec	a
+	jr	z,moveDownS2
+	dec	a
+	jr	z,moveDownS1
+	inc	b
+	inc	c
+	jr	moveDownL1
+moveDownS1:
+	ld	a,b
+	or	a
+	jr	z,moveDownS2
+	push	ix
+	pop	hl
+moveDownL2:
+	add	hl,de
+	ld	(hl),2
+	djnz	moveDownL2
+moveDownS2:
+	push	ix
+	pop	hl
+	ld	de,-8
+	ld	bc,(computery)
+	ld	b,0
+moveUpL1:
+	ld	a,c
+	or	a
+	jr	z,moveUpS2
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	jr	z,moveUpS2
+	dec	a
+	jr	z,moveUpS2
+	dec	a
+	jr	z,moveUpS1
+	inc	b
+	dec	c
+	jr	moveUpL1
+moveUpS1:
+	ld	a,b
+	or	a
+	jr	z,moveUpS2
+	push	ix
+	pop	hl
+moveUpL2:
+	add	hl,de
+	ld	(hl),2
+	djnz	moveUpL2
+moveUpS2:
+	ld	bc,64*256+0
+	ld	hl,tempBoard
+moveCheckL1:				; check number of pieces
+	ld	a,(hl)
+	sub	2
+	call	z,moveGood
+	dec	a
+	call	z,moveBad
+	inc	hl
+	djnz	moveCheckL1
+	ld	a,(computerx)
+	or	a
+	call	z,moveBad
+	cp	7
+	call	z,moveBad
+	ld	a,(computery)
+	or	a
+	call	z,moveBad
+	cp	7
+	call	z,moveBad
+	ld	a,r		; just a little randomness
+	and	%00111010
+	call	z,moveBad
+	ld	a,c
+	ret
+
+moveGood:
+	inc	c
+moveBad:
+	inc	c
+	ret
+
+;---------= Check For a Winner =---------
+checkForWinner:
+	xor	a
+	ld	(fillFlag),a
+	sbc	hl,hl
+	ld	(computerTemp),hl
+	ld	(playerTemp),hl
+	ld	de,board
+	ld	b,64
+enterLoopL1:
+	ld	a,(de)
+	or	a
+	jr	nz,enterLoopS0
+	inc	a
+	ld	(fillFlag),a
+enterLoopS0:
+	sub	2
+	jr	nz,enterLoopS1
+	ld	hl,computerTemp
+	inc	(hl)
+enterLoopS1:
+	dec	a
+	jr	nz,enterLoopS2
+	ld	hl,playerTemp
+	inc	(hl)
+enterLoopS2:
+	inc	de
+	djnz	enterLoopL1
+	ld	a,(fillFlag)
+	or	a
+	jr	nz,enterLoopS3
+;-----> Level is complete
+	ld	hl,(playerScore)
+	ld	de,(playerTemp)
+	add	hl,de
+	ld	(playerScore),hl
+	push	hl
+	ld	hl,(computerScore)
+	ld	de,(computerTemp)
+	add	hl,de
+	ld	(computerScore),hl
+	pop	de
+	sbc	hl,de
+	pop	hl	; don't return
+	jp	c,playerWon
+	jp	gameOver
+enterLoopS3:
+	ld	hl,29*256+66
+	ld	(pencol),hl
+	ld	hl,(playerScore)
+	ld	de,(playerTemp)
+	add	hl,de
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,5
+	bcall(_dispop1a)
+	ld	hl,41*256+66
+	ld	(pencol),hl
+	ld	hl,(computerScore)
+	ld	de,(computerTemp)
+	add	hl,de
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,5
+	bcall(_dispop1a)
+	ret
+
+hiScore:
+	push	hl
+	xor	a
+	sbc	hl,de
+	pop	hl
+	jr	z,nnhs
+	jr	nc,nhs
+nnhs:	ex	de,hl
+	inc	a
+	ret
+nhs:	or	a
+	ret
+
+;---------= Sprite Data =--------
+;-----> Board Pieces
+boardPieces:
+emptyBlock:
+	.db	%11111111	; 8x8 sprite
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+fullBlock:
+	.db	%11111111	; 8x8 sprite
+	.db	%10000000
+	.db	%10100010
+	.db	%10010100
+	.db	%10001000
+	.db	%10010100
+	.db	%10100010
+	.db	%10000000	
+computerPiece:
+	.db	%11111111	; 8x8 sprite
+	.db	%10000000
+	.db	%10011100
+	.db	%10100010
+	.db	%10100010
+	.db	%10100010
+	.db	%10011100
+	.db	%10000000
+playerPiece:
+	.db	%11111111	; 8x8 sprite
+	.db	%10000000
+	.db	%10011100
+	.db	%10111010
+	.db	%10111110
+	.db	%10111110
+	.db	%10011100
+	.db	%10000000
+;-----> "running" selected block sprites
+selectSprites:
+selectSprite1:
+	.db	%00000000
+	.db	%01110111
+	.db	%00000000
+	.db	%01000001
+	.db	%01000001
+	.db	%01000001
+	.db	%00000000
+	.db	%01110111
+selectSprite2:
+	.db	%00000000
+	.db	%00111011
+	.db	%01000001
+	.db	%01000000
+	.db	%01000001
+	.db	%00000001
+	.db	%01000001
+	.db	%01101110
+selectSprite3:
+	.db	%00000000
+	.db	%01011101
+	.db	%01000001
+	.db	%01000001
+	.db	%00000000
+	.db	%01000001
+	.db	%01000001
+	.db	%01011101
+selectSprite4:
+	.db	%00000000
+	.db	%01101110
+	.db	%01000001
+	.db	%00000001
+	.db	%01000001
+	.db	%01000000
+	.db	%01000001
+	.db	%00111011
+
+;---------= Levels =---------
+
+number_of_levels	=10
+
+level_data:
+
+level1:	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+
+level2:	.db	%00000000
+	.db	%00011000
+	.db	%00000000
+	.db	%01000010
+	.db	%01000010
+	.db	%00000000
+	.db	%00011000
+	.db	%00000000
+
+level3:	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00100100
+	.db	%00100100
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+
+level4:	.db	%00000000
+	.db	%00111100
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00000000
+	.db	%00111100
+	.db	%00000000
+
+level5:	.db	%00000000
+	.db	%01000010
+	.db	%01111110
+	.db	%00000000
+	.db	%00000000
+	.db	%01111110
+	.db	%01000010
+	.db	%00000000
+
+level6:	.db	%00000000
+	.db	%00000000
+	.db	%00101100
+	.db	%00000010
+	.db	%01000000
+	.db	%00110100
+	.db	%00000000
+	.db	%00000000
+
+level7:	.db	%10000001
+	.db	%00000000
+	.db	%00111100
+	.db	%00000100
+	.db	%00100000
+	.db	%00111100
+	.db	%00000000
+	.db	%10000001
+
+level8:	.db	%11111111
+	.db	%10000001
+	.db	%10101101
+	.db	%10000001
+	.db	%10000001
+	.db	%10110101
+	.db	%10000001
+	.db	%11111111
+
+level9:	.db	%00000000
+	.db	%00000000
+	.db	%00110100
+	.db	%00000100
+	.db	%00100000
+	.db	%00100100
+	.db	%00101100
+	.db	%00000000
+
+levelA:	.db	%00000000
+	.db	%00000000
+	.db	%00001100
+	.db	%00000100
+	.db	%00100000
+	.db	%00110000
+	.db	%00000000
+	.db	%00000000
+
+picture:
+	.db	%00111000,%00000000,%00000000,%00000000
+	.db	%01000100,%00001000,%01001111,%11111110
+	.db	%01010101,%01001000,%00000000,%00000000
+	.db	%01010101,%10101110,%01010100,%11111110
+	.db	%01010101,%00001001,%01001000,%00000000
+	.db	%01010101,%00001110,%01010100,%11111110
+	.db	%01000100,%00000000,%00000000,%00000000
+	.db	%00111001,%11111111,%11111111,%11111110
+
+;---------= Dialog =----------
+info:	.db	"by Joe W",0
+	.db	"Level: ",0
+	.db	"Human:",0
+	.db	"TI-83:",0
+	.db	"HiScore:",0
+
+won_text:
+	.db	" You Won! ",0
+lost_text:
+	.db	" You Lost ",0
+nhs_text:
+	.db	"High Score",0
+
+.end
+END

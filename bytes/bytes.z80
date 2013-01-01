@@ -1,0 +1,738 @@
+; Bytes v2.0 by Joe Wingbermuehle 19990824
+; http://joewing.calc.org
+; joewing@calc.org
+
+	.nolist
+	#include	"ion.inc"
+	.list
+
+#ifdef TI83P
+	.org	progstart-2
+	.db	$BB,$6D
+#else
+	.org	progstart
+#endif
+
+storage		=sram
+
+snakeDir	=storage	; current snake direction (1 byte)
+snakeStart	=storage+1	; current location in snake_map (1 byte)
+snakeEnd	=storage+2	; ending location in snake_map (1 byte)
+snakeLength	=storage+3	; length of snake (1 byte)
+moveDelay	=storage+4	; delay for move (1 byte)
+dotx		=storage+5	; x coordinate of dot (1 byte)
+doty		=storage+6	; y coordinate of dot (1 byte)
+makeLonger	=storage+7	; should size of snake be increased? (1 byte)
+snakeMap	=storage+8	; snake data: type, x, y (3*24=72 bytes)
+level		=storage+80	; level (1 byte)
+num_of_levs	=storage+81	; number of levels (1 byte)
+lives		=storage+82	; number of lives (1 byte)
+tempBuffer	=storage+83	; buffer for level data (384 bytes)
+
+; variables stored in instructions
+#define	startLevel	startLevel_lbl+1	; start level - 1 byte
+#define speed		speed_lbl+1		; speed of the snake
+
+; All 2-byte variables are stored in instructions to save space
+#define fileStart	fileStart_lbl+1	; start of file - 2 bytes
+#define score		score_lbl+1		; score - 2 bytes
+#define file		file_lbl+1		; pointer to level data - 2 bytes
+#define	curData		curData_lbl+1		; pointer to current level - 2 bytes
+#define curFat		curFat_lbl+1		; pointer to fat entry - 2 bytes
+
+	ret
+	jr	nc,start_of_program
+description:
+	.db	"Bytes v2.0",0
+start_of_program:
+
+;---------= Main Menu =---------
+reset_levels:
+	ld	hl,(vat)
+	ld	ix,detectString
+	call	ionDetect
+	ret	nz
+loadBuffer:
+	ld	(curFat),de
+	ld	(fileStart),hl
+	ld	c,-1
+	xor	a
+	cpir
+	ld	a,(hl)
+	ld	(num_of_levs),a
+	inc	hl
+	inc	hl
+	inc	hl
+	ld	(file),hl
+	ld	a,1
+	ld	(startLevel),a
+menu:	call	setTop
+	ld	hl,opt1
+	bcall(_vputs)
+	ld	de,28*256+10
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,35*256+10
+	ld	(pencol),de
+	bcall(_vputs)
+fileStart_lbl:
+	ld	hl,0
+	bcall(_vputs)
+	ld	hl,42*256+10
+	ld	(pencol),hl
+	ld	hl,opt4
+	bcall(_vputs)
+menuLoop:
+	call	waitKey
+	cp	48	; alpha
+	jp	z,changeOptions
+	sub	54	; 2nd
+	jp	z,startGame
+	dec	a	; alpha
+	jr	z,changeLevelSet
+	dec	a	; del
+	ret	z
+	jr	menuLoop
+;-----> Setup top of screen/hs
+setTop:	bcall(_clrscr)
+	ld	hl,3*256
+	ld	(currow),hl
+	ld	hl,description
+	bcall(_puts)
+	ld	bc,0*256+(63-8)
+	ld	de,95*256+(63-8)
+	bcall(_darkline)
+	ld	hl,9*256+0
+	ld	(pencol),hl
+	ld	hl,about1
+	bcall(_vputs)
+	ld	hl,56*256+0
+	ld	(pencol),hl
+	ld	hl,info1
+	bcall(_vputs)
+file_lbl:
+	ld	hl,0
+	dec	hl
+	ld	a,(hl)
+	dec	hl
+	ld	l,(hl)
+	ld	h,a
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,5
+	bcall(_dispop1a)
+	ld	hl,21*256+10
+	ld	(pencol),hl
+	ret
+
+;-----> Change level set
+changeLevelSet:
+curFat_lbl:
+	ld	hl,0
+	ld	ix,detectString
+	call	ionDetect
+	jp	nz,reset_levels
+	jp	loadBuffer
+
+;-----> Change options
+changeOptions:
+	call	setTop
+startLevel_lbl:
+	ld	a,0
+	ld	(tempBuffer),a
+speed_lbl:
+	ld	a,2		; 2 is the default speed
+	ld	(tempBuffer+1),a
+	ld	hl,bopt1
+	bcall(_vputs)
+	ld	de,28*256+10
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,35*256+10
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,42*256+10
+	ld	(pencol),de
+	bcall(_vputs)
+changeOptionsLoop:
+	ld	hl,21*256+68
+	ld	(pencol),hl
+	ld	a,(tempBuffer)
+	bcall(_setxxop1)
+	ld	a,2
+	bcall(_dispop1a)
+	ld	hl,blank
+	bcall(_vputs)
+	ld	hl,28*256+58
+	ld	(pencol),hl
+	ld	a,(tempBuffer+1)
+	bcall(_setxxop1)
+	ld	a,1
+	bcall(_dispop1a)
+	call	waitKey
+	cp	4
+	jr	z,levelUp
+	dec	a
+	jr	z,levelDown
+	cp	48-1
+	jr	z,changeSpeed
+	cp	56-1
+	jp	z,menu
+	cp	54-1
+	jr	nz,changeOptionsLoop
+	ld	a,(tempBuffer)
+	ld	(startLevel),a
+	ld	a,(tempBuffer+1)
+	ld	(speed),a
+	jp	menu
+
+;-----> Change Start Level
+levelUp:
+	ld	a,(tempBuffer)
+	inc	a
+	ld	bc,(num_of_levs)
+	inc	c
+	cp	c
+	jr	nz,levelSet
+	ld	a,1
+	jr	levelSet
+levelDown:
+	ld	a,(tempBuffer)
+	dec	a
+	jr	nz,levelSet
+	ld	a,(num_of_levs)
+levelSet:
+	ld	(tempBuffer),a
+	jr	changeOptionsLoop
+
+;-----> Change Speed
+changeSpeed:
+	ld	a,(tempBuffer+1)
+	cp	3
+	jr	nz,speedOK
+	xor	a
+speedOK:
+	inc	a
+	ld	(tempBuffer+1),a
+	jr	changeOptionsLoop
+
+;---------= Start Game =---------
+startGame:
+	ld	a,5
+	ld	(lives),a
+	ld	a,(startLevel)
+	dec	a
+	ld	(level),a
+	sbc	hl,hl
+	ld	(score),hl
+;-----> Setup Variables
+nextLevel:
+	ld	hl,level
+	inc	(hl)
+	ld	a,(num_of_levs)
+	inc	a
+	cp	(hl)
+	jr	nz,nextLevelCont
+	ld	(hl),1
+nextLevelCont:
+	ld	bc,(level-1)
+	ld	hl,(file)
+	ld	de,44
+	or	a
+	sbc	hl,de
+findLevel:
+	add	hl,de
+	djnz	findLevel
+	ld	(curData),hl
+	ld	hl,storage
+	ld	b,79
+	xor	a
+clearVars:
+	ld	(hl),a
+	inc	hl
+	djnz	clearVars
+	inc	a
+	ld	(snakeDir),a
+	ld	(snakeEnd),a
+	ld	a,4
+	ld	(snakeLength),a
+	ld	hl,snakeMap
+curData_lbl:
+	ld	de,0
+	ld	(hl),a		; first draw head!
+	inc	hl
+	ex	de,hl
+	ldi
+	ldi
+;-----> Draw Screen
+	bcall(_cleargbuf)
+	ld	b,96/4
+	xor	a
+screen_lp1:
+	push	bc
+	push	af
+	ld	ix,brick_sprite
+	push	ix
+	ld	b,4
+	ld	l,0
+	call	ionPutSprite
+	pop	ix
+	ld	a,(lives)
+	add	a,a
+	add	a,a
+	ld	d,a
+	pop	af
+	push	af
+	ld	b,4
+	ld	l,60
+	cp	d
+	jr	c,screen_s1
+	call	ionPutSprite
+	jr	screen_s2
+screen_s1:
+	ld	ix,life_sprite
+	call	ionPutSprite
+screen_s2:
+	pop	af
+	add	a,4
+	pop	bc
+	djnz	screen_lp1
+
+;-----> Draw Level
+	ld	hl,(curData)
+	inc	hl
+	inc	hl
+	ld	de,tempBuffer
+	ld	bc,3*14*256+1
+	call	ionDecompress
+	ld	hl,tempBuffer
+	ld	de,4*256+0
+drawLevel:
+	ld	a,(hl)
+	or	a
+	jr	z,noBrick
+	push	de
+	push	hl
+	ld	ix,brick_sprite
+	ld	b,4
+	ld	l,d
+	ld	a,e
+	call	ionPutSprite
+	pop	hl
+	pop	de
+noBrick:
+	inc	hl
+	inc e \ inc e
+	inc e \ inc e
+	ld	a,e
+	cp	96
+	jr	nz,drawLevel
+	ld	e,0
+	inc d \ inc d
+	inc d \ inc d
+	ld	a,d
+	cp	60
+	jr	nz,drawLevel
+
+;-----> Pause for user & show level
+	bcall(_copygbuf)
+	call	dispScore
+	call	waitKey
+
+;-----> Set dot
+	call	setDot
+pauseOver:
+	ld	b,35
+showDelay:
+	ei
+	halt
+	djnz	showDelay
+
+;-----> Main Loop
+main:	call	drawDot
+	call	draw_snake	; turn on for copy
+	bcall(_copygbuf)
+	ld	bc,(speed-1)
+delayLoop:
+	ei
+	halt
+	halt
+	djnz	delayLoop
+	call	collision
+	ld	hl,makeLonger
+	ld	a,(hl)
+	or	a
+	jr	z,noLonger
+	ld	a,(snakeEnd)
+	or	a
+	jr	z,noLonger
+	dec	(hl)
+	ld	a,(snakeLength)
+	inc	a
+	inc	a
+	ld	(snakeLength),a
+	cp	24
+	jp	z,nextLevel
+noLonger:
+	call	draw_snake	; turn off for move
+	call	drawDot
+	ld	a,$FF
+	out	(1),a
+	ld	a,$FE
+	out	(1),a
+	in	a,(1)
+	ld	c,1
+	cp	247
+	jp	z,mUp
+	cp	251
+	jp	z,mRight
+	sub	253
+	jp	z,mLeft
+	dec	a
+	jp	z,mDown
+	ld	a,$BF
+	out	(1),a
+	in	a,(1)
+	cp	191
+	jp	z,pause
+	cp	127
+	jp	z,exit
+finishedKeys:
+	ld	hl,moveDelay
+	ld	a,(hl)
+	and	1
+	xor	1
+	ld	(hl),a
+	call	z,moveSnake
+	jr	main
+
+mDown:	inc	c
+mUp:	inc	c
+mLeft:	inc	c
+mRight:	ld	a,c
+	ld	(snakeDir),a
+	jr	finishedKeys
+
+
+;-----> Pause
+pause:	ld	a,1
+	out	(3),a
+	jp	pauseOver
+
+;-----> Losser
+exit:	call	setTop
+	ld	hl,lost_txt
+	ld	de,3*256+3
+	ld	(currow),de
+	bcall(_puts)
+	call	dispScore
+	ld	hl,(file)
+	dec	hl
+	ld	a,(hl)
+	dec	hl
+	ld	l,(hl)
+	ld	h,a
+	ld	de,(score)
+	bcall(_cphlde)
+	jr	nc,notNHS
+#ifdef TI83P
+	di
+#endif
+	ld	hl,(file)
+	dec	hl
+	ld	(hl),d
+	dec	hl
+	ld	(hl),e
+	ld	hl,1*256+6
+	ld	(currow),hl
+	ld	hl,nhs_txt
+	bcall(_putps)
+notNHS:	call	waitKey
+	jp	menu
+
+;=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+;-----> Display the Score/Level
+dispScore:
+	ld	hl,2*256+4
+	ld	(currow),hl
+	ld	hl,level_txt
+	bcall(_puts)
+	ld	hl,(level)
+	ld	h,0
+	bcall(_disphl)
+	ld	hl,2*256+5
+	ld	(currow),hl
+	ld	hl,score_txt
+	bcall(_puts)
+score_lbl:
+	ld	hl,0
+	bcall(_disphl)
+	ret
+
+;-----> Draw Snake on/off
+draw_snake:
+	ld	hl,snakeMap
+	ld	bc,(snakeLength-1)
+draw_snake_lp:
+	push	hl
+	push	bc
+	call	drawSeg
+	pop	bc
+	pop	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	djnz	draw_snake_lp
+	ret
+
+;-----> Draw segment (hl)
+drawSeg:
+	ld	ix,snake_sprites-4
+	ld	bc,$0004
+	ld	a,(hl)
+	or	a
+	ret	z
+drawSegLoop:
+	add	ix,bc
+	dec	a
+	jr	nz,drawSegLoop
+	inc	hl
+	ld	b,(hl)
+	inc	hl
+	ld	a,(hl)
+	ld	l,b
+	ld	b,$04
+	jp	ionPutSprite
+
+;-----> Move the Snake
+moveSnake:
+	call	getStart
+	ld	(hl),5		; change old head to body
+	inc	hl
+	ld	b,(hl)
+	inc	hl
+	ld	c,(hl)
+	push	bc		; save location
+	ld	a,(snakeStart)
+	inc	a
+	ld	bc,(snakeLength)
+	cp	c
+	jr	nz,moveSnakeS1
+	xor	a
+moveSnakeS1:
+	ld	(snakeStart),a
+	ld	a,(snakeEnd)
+	inc	a
+	cp	c
+	jr	nz,moveSnakeS2
+	xor	a
+moveSnakeS2:
+	ld	(snakeEnd),a
+	call	getStart
+	ld	a,(snakeDir)
+	ld	(hl),a		; set new head
+	inc	hl
+	pop	bc
+	push	hl
+	ld	hl,0
+	ld	a,(snakeDir)
+	dec	a
+	jr	nz,notRight
+	ld	l,4
+	jr	applied
+notRight:
+	dec	a
+	jr	nz,notLeft
+	ld	l,-4
+	jr	applied
+notLeft:
+	dec	a
+	jr	nz,notUp
+	ld	h,-4
+	jr	applied
+notUp:	ld	h,4
+applied:
+	ld	a,h
+	add	a,b
+	ld	b,a
+	ld	a,l
+	add	a,c
+	ld	c,a
+	pop	hl
+	ld	(hl),b
+	inc	hl
+	ld	(hl),c
+	ld	bc,(snakeEnd-1)
+	ld	hl,snakeMap-3
+	ld	de,$0003
+	inc	b
+getEndLoop:
+	add	hl,de
+	djnz	getEndLoop
+	ld	(hl),b		; delete tail
+	ret
+
+;-----> Get Start
+getStart:
+	ld	bc,(snakeStart-1)
+	ld	hl,snakeMap-3
+	ld	de,$0003
+	inc	b
+getStartLoop:
+	add	hl,de
+	djnz	getStartLoop
+	ret
+
+;-----> Check for collision
+collision:
+	call	drawHead
+	call	getStart
+	inc	hl
+	ld	b,(hl)
+	inc	hl
+	ld	c,(hl)
+	push	bc
+	ld	a,c	; x
+	ld	e,b	; y
+	call	ionGetPixel
+	and	(hl)
+	push	af
+	call	drawHead
+	pop	af
+	pop	bc
+	ret	z
+	ld	a,(dotx)
+	cp	c
+	jr	nz,setOver
+	ld	a,(doty)
+	cp	b
+	jr	nz,setOver
+	ld	hl,(score)
+	inc	hl
+	ld	(score),hl
+	ld	hl,makeLonger
+	inc	(hl)
+	call	drawDot
+	call	setDot
+	jp	drawDot
+setOver:
+	pop	hl
+	ld	hl,lives
+	dec	(hl)
+	jp	z,exit
+	jp	nextLevelCont
+
+;-----> Put a dot randomly on screen
+setDot:	ld	b,22
+	call	ionRandom
+	inc	a
+	add	a,a
+	add	a,a
+	ld	(dotx),a
+	push	af
+	ld	b,14
+	call	ionRandom
+	inc	a
+	add	a,a
+	add	a,a
+	ld	(doty),a
+	ld	e,a
+	pop	af
+	call	ionGetPixel
+	and	(hl)
+	jr	nz,setDot
+	ret
+
+;-----> Draw dot
+drawDot:
+	ld	ix,dot_sprite
+	ld	a,(doty)
+	ld	l,a
+	ld	a,(dotx)
+	ld	b,4
+	jp	ionPutSprite
+
+;-----> Draw head
+drawHead:
+	call	getStart
+	jp	drawSeg
+
+;-----> Wait for a key press
+waitKey:
+	call	time
+waitLoop2:
+	bcall(_getk)
+	or	a
+	jr	z,waitLoop2
+	ld	b,a
+time:	push	bc
+	bcall(_getk)
+	pop	bc
+	or	a
+	jr	nz,time
+	ld	a,b
+	ret
+
+;-----> Sprites
+snake_sprites:
+	.db	%11100000	; right
+	.db	%10110000
+	.db	%11110000
+	.db	%11100000
+	.db	%01110000	; left
+	.db	%11010000
+	.db	%11110000
+	.db	%01110000
+	.db	%01100000	; up
+	.db	%11110000
+	.db	%10110000
+	.db	%11110000
+	.db	%11110000	; down
+	.db	%11110000
+	.db	%10110000
+	.db	%01100000
+	.db	%11110000	; body
+	.db	%11010000
+	.db	%10110000
+	.db	%11110000
+brick_sprite:
+	.db	%11010000
+	.db	%00000000
+	.db	%10110000
+	.db	%00000000
+dot_sprite:
+	.db	%11110000
+	.db	%10010000
+	.db	%10010000
+	.db	%11110000
+life_sprite:
+	.db	%11100000
+	.db	%01100000
+	.db	%01100000
+	.db	%01100000
+
+detectString:
+	.db	"BY1JW",0
+nhs_txt:
+	.db	14,"New High "
+score_txt:
+	.db	"Score:",0
+lost_txt:
+	.db	"Game Over",0
+about1:	.db	"by Joe Wingbermuehle"
+	.db	0
+opt1:	.db	"2nd - Start",0
+opt2:	.db	"ALPHA - Options",0
+opt3:	.db	"MODE - ",0
+opt4:	.db	"DEL - Exit",0
+info1:	.db	"HiScore:",0
+bopt1:	.db	"Up/Down - "
+level_txt:
+	.db	"Level:",0
+bopt2:	.db	"ALPHA - Speed:",0
+bopt3:	.db	"2nd - OK",0
+bopt4:	.db	"DEL - Cancel",0
+blank:	.db	"  ",0
+
+.end
+; Bytes by Joe Wingbermuehle

@@ -1,0 +1,1234 @@
+;+------------------------------------------------------+
+;|		       JezzBall v2.0			|
+;|		    by Joe Wingbermuehle		|
+;|			 19990824			|
+;+------------------------------------------------------+
+; http://joewing.calc.org
+
+.nolist
+#include	"ion.inc"
+
+;-------+-= Variables =-+-----------------------------------------------+-------+
+; Name	| Location	| Description					| Size	|
+;-------+---------------+-----------------------------------------------+-------+
+nballs	=sram		; number of balls				| 1	|
+balls	=sram+1		; 3*8 matrix with ball data (x,y,direction)	| 24	|
+xc	=sram+25	; x location for sprite				| 1	|
+yc	=sram+26	; y location for sprite				| 1	|
+loc	=sram+27	; location of sprite				| 2	|
+playerx	=sram+29	; player x location				| 1	|
+playery	=sram+30	; player y location				| 1	|
+linel	=sram+31	; line length					| 1	|
+ballc	=sram+32	; ball count - delay for moving ball/line	| 1	|
+lined	=sram+33	; line direction				| 1	|
+linet	=sram+34	; is the line still moving up?			| 1	|
+lineb	=sram+35	; is the line still moving down?		| 1	|
+wcount	=sram+36	; delay for swapping cursor			| 1	|
+linex	=sram+37	; line x position				| 1	|
+liney	=sram+38	; line y position				| 1	|
+playerd	=sram+39	; player direction				| 1	|
+lflag	=sram+40	; losser/winner flag				| 1	|
+stop1	=sram+41	; left/top stop point for line			| 1	|
+stop2	=sram+42	; right/bottom stop point for line		| 1	|
+score	=sram+43	; the score					| 2	|
+lives	=sram+45	; lives left					| 1	|
+temp	=sram+46	; temporary variable - level/area count		| 2	|
+speedt	=sram+47	; temporary variable - speed (2nd half of temp)	| n/a	|
+scount	=sram+48	; timer variable for score			| 1	|
+fillx1	=sram+49	; fill 1st x coordinate				| 1	|
+filly1	=sram+50	; fill 1st y coordinate				| 1	|
+fillx2	=sram+51	; fill 2nd x coordinate				| 1	|
+filly2	=sram+52	; fill 2nd y coordinate				| 1	|
+;-------+---------------+-----------------------------------------------+-------+
+.list
+
+#ifdef TI83P
+	.org	progstart-2
+	.dw	$6DBB
+#else
+	.org	progstart
+#endif
+
+;-----------= Header Data for SOS =-----------
+	ret
+	jr	nc,prog_start
+	.db	"JezzBall v2.0",0
+prog_start:
+
+;---------= Beginning of JezzBall =---------
+top:	ld	a,(slev)
+	dec	a
+	ld	(nballs),a
+	ld	b,8
+	ld	hl,balls
+tplp:	push	bc
+	ld	b,65
+	call	ionRandom
+	inc	a
+	inc	a
+	ld	(hl),a
+	ld	b,55
+	call	ionRandom
+	inc	a
+	inc	a
+	inc	hl
+	ld	(hl),a
+	inc	hl
+	ld	b,4
+	call	ionRandom
+	ld	(hl),a
+	inc	hl
+	pop	bc
+	djnz	tplp
+
+;---------- Menu ----------
+menu:	call	menudraw
+	ld	hl,$170A
+	ld	(pencol),hl
+	ld	hl,info1
+	bcall(_vputs)
+	ld	de,$1E0A
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,$250A
+	ld	(pencol),de
+	bcall(_vputs)
+menulp:	bcall(_getk)
+	cp	54	; 2nd
+	jp	z,starta
+	cp	48	; alpha
+	jp	z,setlevel
+	cp	56	; del
+	jr	nz,menulp
+	ret
+
+;---------- Set Start Level ----------
+setlevel:
+	call	menudraw
+	ld	a,(slev)
+	dec	a
+	ld	(temp),a
+	ld	a,(speed)
+	ld	(speedt),a
+	ld	hl,$250A
+	ld	(pencol),hl
+	ld	hl,info6
+	bcall(_vputs)
+	ld	de,$2C0A
+	ld	(pencol),de
+	bcall(_vputs)
+sllp:	ld	hl,$170A
+	ld	(pencol),hl
+	ld	hl,info4
+	bcall(_vputs)
+	ld	a,(temp)
+	inc	a
+	bcall(_setxxop1)
+	ld	a,$01
+	bcall(_dispop1a)
+	ld	hl,$1E0A
+	ld	(pencol),hl
+	ld	hl,info5
+	bcall(_vputs)
+	ld	a,(speedt)
+	bcall(_setxxop1)
+	ld	a,1
+	bcall(_dispop1a)
+	call	wkey
+	cp	48	; alpha
+	jr	z,changeSpeed
+	cp	54	; 2nd
+	jr	z,ssl
+	cp	4	; up
+	jr	z,adslv
+	dec	a	; down
+	jr	z,sbslv
+	cp	56-1	; del
+	jp	z,menu
+	jr	sllp
+sbslv:	ld	a,(temp)
+	dec	a
+xslvx:	and	%00000111
+	ld	(temp),a
+	jr	sllp
+adslv:	ld	a,(temp)
+	inc	a
+	jr	xslvx
+ssl:	ld	a,(temp)
+	inc	a
+	ld	(slev),a
+	ld	a,(speedt)
+	ld	(speed),a
+	jp	top
+
+changeSpeed:
+	ld	a,(speedt)
+	inc	a
+	cp	4
+	jr	nz,changeSpeedNR
+	ld	a,1
+changeSpeedNR:
+	ld	(speedt),a
+	jr	sllp
+
+;---------- Draw the basics of the menu screen ----------
+menudraw:
+	bcall(_clrscr)
+	ld	hl,$0100
+	ld	(currow),hl
+	ld	hl,name
+	bcall(_putps)
+	ld	bc,$0037
+	ld	de,$5E37
+	bcall(_darkline)
+	res     7,(iy+20)
+	ld	hl,$0901
+	ld	(pencol),hl
+	ld	hl,about
+	bcall(_vputs)
+	ld	hl,$3801
+	ld	(pencol),hl
+	ld	hl,hscr
+	bcall(_vputs)
+	ld	hl,(highscore)
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,6
+	bcall(_dispop1a)
+	ret
+
+;---------- Start a level ----------
+starta:	ld	hl,100
+	ld	(score),hl
+	ld	a,30
+	ld	(scount),a
+start:	ld	a,(nballs)
+	inc	a
+	ld	(nballs),a
+	ld	(lives),a
+	cp	$09
+	jp	z,goverwon
+restart:
+	bcall(_cleargbuf)
+	call	ballx
+	xor	a
+	sbc	hl,hl
+	ld	(temp),hl	; reset area filled
+	ld	(lflag),a
+	ld	(linel),a
+	ld	(wcount),a
+	ld	(playerd),a
+	ld	a,$08
+	ld	(ballc),a
+	ld	hl,30*256+40
+	ld	(playerx),hl
+	call	player
+
+;---------- Draw game screen ----------
+	ld	bc,$0001
+	ld	d,b
+	ld	e,$3F
+	bcall(_darkline)
+	ld	b,$49
+	ld	d,b
+	bcall(_darkline)
+	ld	b,1
+	ld	e,c
+	bcall(_darkline)
+	ld	c,$3F
+	ld	e,c
+	bcall(_darkline)
+	set     7,(iy+$14)
+	ld	hl,(2*7+2)*256+75
+	ld	(pencol),hl
+	ld	hl,hscr+2
+	bcall(_vputs)
+	ld	hl,75
+	ld	(pencol),hl
+	ld	hl,levtxt
+	bcall(_vputs)
+	ld	a,(nballs)
+	bcall(_setxxop1)
+	ld	a,1
+	bcall(_dispop1a)
+	ld	ix,lifepic
+	ld	l,9
+	ld	a,78
+	ld	b,5
+	call	ionPutSprite
+	ld	hl,8*256+78+8
+	ld	(pencol),hl
+	ld	a,(lives)
+	bcall(_setxxop1)
+	ld	a,1
+	bcall(_dispop1a)
+	set	4,(iy+20)
+	ld	bc,75*256+63-(7*2+1)
+	ld	de,94*256+63-(7*2+1)
+	bcall(_darkline)
+	ld	c,63-(7*4+1)
+	ld	e,63-(7*4+1)
+	bcall(_darkline)
+	ld	c,63-7
+	ld	e,63-7
+	bcall(_darkline)
+	ld	a,76
+	ld	l,31
+	ld	bc,31*256+2
+	ld	ix,jezzball
+	call	ionLargeSprite
+
+;---------- Main game loop ----------
+main:	call	ionFastCopy
+	ld	a,(scount)
+	dec	a
+	jr	nz,contScore
+	ld	hl,(score)
+	dec	hl
+	ld	(score),hl
+	ld	a,h
+	or	l
+	jp	z,lostTime
+	bcall(_setxxxxop2)
+	ld	hl,(7*3+1)*256+75
+	ld	(pencol),hl
+	bcall(_op2toop1)
+	ld	a,6
+	bcall(_dispop1a)
+	ld	hl,blank
+	bcall(_vputs)
+	ld	a,30
+contScore:
+	ld	(scount),a
+	ld	a,(ballc)
+	dec	a
+	jr	nz,mains1
+	call	contLine
+	call	mball
+	ld	a,1
+mains1:	ld	(ballc),a
+	ld	bc,(speed-1)
+delay:	ei	; just to make sure...
+	halt
+	djnz	delay
+skipdelay:
+	ld	a,(lflag)
+	dec	a
+	jp	z,lost
+	dec	a
+	jp	z,start
+	ld	a,$FF
+        out	($01),a
+	ld	a,$FE
+        out	($01),a
+	in	a,($01)
+	cp	253
+	jp	z,mleft
+	cp	251
+	jp	z,mright
+	cp	254
+	jp	z,mdown
+	cp	247
+	jp	z,mup
+	ld	a,(wcount)
+	or	a
+	jr	z,noSkipMoves
+	dec	a
+	ld	(wcount),a
+	jr	skipMoves
+noSkipMoves:
+	ld	a,$DF
+	out	($01),a
+	in	a,($01)
+	cp	127
+	jp	z,swapl
+skipMoves:
+	ld	a,$BF
+	out	($01),a
+	in	a,($01)
+	cp	223
+	jp	z,startLine
+	cp	191
+	jp	z,pause
+        cp	127
+	jp	nz,main
+	jr	lost2
+
+;---------- We have a WINNER! ----------
+goverwon:
+	ld	hl,winner
+	jp	exit
+
+lostTime:
+	ld	a,(lives)
+	dec	a
+	ld	(lives),a
+	jp	z,lost2
+	ld	hl,100
+	ld	(score),hl
+	jp	restart
+
+;---------- We have a LOSSER! ----------
+lost:	ld	a,(lives)
+	dec	a
+	ld	(lives),a
+	jp	nz,restart
+lost2:	ld	hl,losser
+
+exit:	push	hl
+	call	menudraw
+	ld	hl,4*256+3
+	ld	(currow),hl
+	pop	hl
+	bcall(_putps)
+	ld	hl,1*256+5
+	ld	(currow),hl
+	ld	de,(highscore)
+	ld	hl,(score)
+	call	hiScore
+	ld	(highscore),hl
+	ld	hl,nhs
+	jr	nz,exitLoop2
+	bcall(_puts)
+exitLoop2:
+	bcall(_getk)
+	or	a
+	jr	nz,exitLoop2
+	ei
+	halt
+	call	wkey
+	jp	top
+
+;---------- Move right ----------
+mright:	call	player
+	ld	a,$01
+	ld	(playerd),a
+	ld	a,(playerx)
+	inc	a
+	cp	69
+	jr	z,movex
+	ld	(playerx),a
+
+movex:	call	player
+	jp	main
+
+;---------- Move left ----------
+mleft:	call	player
+	ld	a,$01
+	ld	(playerd),a
+	ld	a,(playerx)
+	dec	a
+	jr	z,movex
+	ld	(playerx),a
+	jr	movex
+
+;---------- Move up ----------
+mup:	call	player
+	xor	a
+	ld	(playerd),a
+	ld	a,(playery)
+	dec	a
+	jr	z,movex
+	ld	(playery),a
+	jr	movex
+
+;---------- Move down ----------
+mdown:	call	player
+	xor	a
+	ld	(playerd),a
+	ld	a,(playery)
+	inc	a
+	cp	58
+	jr	z,movex
+	ld	(playery),a
+	jr	movex
+
+;---------- Swap line direction ----------
+swapl:	call	player
+	ld	a,20
+	ld	(wcount),a
+	ld	a,(playerd)
+	xor	%00000001
+	ld	(playerd),a
+	call	player
+	jp	main
+
+;---------- Pause ----------
+pause:	ld	a,1
+	out	(3),a
+	ei
+	halt
+pausex:	jp	main
+
+;------------ Wait for a key press ------------
+; I use this method instead of GetKey to prevent
+; apd which would mess up all the variables.
+wkey:	bcall(_getk)
+	or	a
+	jr	z,wkey
+	ret
+
+;---------- Turn player on/off ----------
+player:	ld	hl,hsym
+	ld	a,(playerd)
+	or	a
+	jr	z,pls1
+	ld	hl,vsym
+pls1:	ld	(loc),hl
+	ld	hl,(playerx)
+	ld	(xc),hl
+	call	sprite
+	ret
+
+;---------- Turn ball(s) on/off --------
+ballx:	ld	hl,ball
+	ld	(loc),hl
+	ld	bc,(nballs-1)
+	ld	hl,balls
+ballxl:	push	bc
+	ld	a,(hl)
+	ld	(xc),a
+	inc	hl
+	ld	a,(hl)
+	ld	(yc),a
+	inc	hl
+	inc	hl
+	push	hl
+	call	sprite
+	pop	hl
+	pop	bc
+	djnz	ballxl
+	ret
+
+;---------- Move ball(s) ----------
+mball:	call	player
+	call	ballx
+	ld	bc,(nballs-1)
+	ld	hl,balls	; hl points to balls
+mblp:	push	bc
+	ld	a,(hl)		; load ball data
+	ld	(xc),a
+	inc	hl
+	ld	a,(hl)
+	ld	(yc),a
+	inc	hl
+	ld	a,(hl)
+	push	hl
+	ld	d,a	; register d will hold direction
+mbd0:	or	a
+	jp	nz,mbd1
+	ld	a,(xc)		; x+1,y+1
+	add	a,5
+	ld	(xc),a
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir1
+	ld	a,(xc)
+	sub	4
+	ld	(xc),a
+	ld	a,(yc)
+	add	a,5
+	ld	(yc),a
+	ld	a,$01
+	call	pixel
+	jr	z,mbd0s2
+	call	mbChangeDir2
+mbd0s2:	ld	a,(yc)
+	sub	4
+	ld	(yc),a
+	jp	mbx
+mbd1:	dec	a
+	jp	nz,mbd2
+	ld	hl,xc		; x-1,y+1
+	dec	(hl)
+	dec	(hl)
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir1
+	ld	hl,xc
+	inc	(hl)
+	ld	a,(yc)
+	add	a,5
+	ld	(yc),a
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir2
+	ld	a,(yc)
+	sub	4
+	ld	(yc),a
+	jp	mbx
+mbd2:	dec	a
+	jp	nz,mbd3
+	ld	hl,yc
+	dec	(hl)
+	dec	(hl)
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir2
+	ld	hl,yc
+	inc	(hl)
+	ld	a,(xc)		; x+1,y-1
+	add	a,5
+	ld	(xc),a
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir1
+	ld	a,(xc)
+	sub	4
+	ld	(xc),a
+	jp	mbx
+mbd3:	ld	hl,yc
+	dec	(hl)
+	dec	(hl)
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir2
+	ld	hl,yc
+	inc	(hl)
+	ld	hl,xc		; x-1,y-1
+	dec	(hl)
+	dec	(hl)
+	ld	a,$01
+	call	pixel
+	call	nz,mbChangeDir1
+	ld	hl,xc
+	inc	(hl)
+mbx:	pop	hl
+	ld	a,d
+	ld	(hl),a
+	dec	hl
+	ld	a,(yc)
+	ld	(hl),a
+	dec	hl
+	ld	a,(xc)
+	ld	(hl),a
+	inc	hl	; point to yc
+	inc	hl	; point to direction
+	inc	hl	; point to next xc
+	pop	bc
+	dec	b
+	jp	nz,mblp
+	call	ballx
+	jp	player
+mbChangeDir1:	; add/sub 1
+	ld	a,d
+	xor	%00000001
+	ld	d,a
+	ret
+mbChangeDir2:	; add/sub 2
+	ld	a,d
+	xor	%00000010
+	ld	d,a
+	ret
+	
+
+;---------- Start a line ----------
+startLine:
+	ld	a,(linel)
+	or	a
+	jr	nz,slx
+	ld	de,(playery)
+	inc	e
+	inc	e
+	ld	a,(playerx)
+	inc	a
+	inc	a
+	call	ionGetPixel
+	and	(hl)
+	jr	z,slx
+	ld	a,1
+	ld	(linel),a
+	ld	(linet),a
+	ld	(lineb),a
+	ld	hl,(playerx)
+	ld	(linex),hl
+	ld	a,(playerd)
+	ld	(lined),a
+slx:	jp	main
+
+;---------- Continue a line ----------
+contLine:
+	ld	a,(linel)
+	or	a
+	ret	z
+	inc	a
+	ld	(linel),a
+	call	player
+	ld	a,(lined)
+	or	a
+	jr	nz,cls1
+	; Horizontal line
+	call	hLineTest	; check if a ball hit the line!
+	ld	a,(lineb)	; right side
+	or	a
+	jr	z,cls0a		; if not moving, then skip it!
+	ld	bc,(linel)
+	ld	a,(linex)	; line and
+	add	a,c		; set xc to it
+	ld	(xc),a
+	ld	(stop2),a
+	ld	a,(liney)	; the y position will not
+	inc	a		; change, however we need to
+	inc	a		; move to the middle of the
+	ld	(yc),a		; sprite (4/2=2 - add 2)
+	ld	a,$01		; is this pixel
+	call	pixel		; aready on?
+	jr	z,cls0		; if it is not, JUST turn it on
+	xor	a		; otherwise, set lineb to zero
+	ld	(lineb),a	; (skip this routine next call)
+cls0:	xor	a
+	call	pixel
+cls0a:	ld	a,(linet)	; left side
+	or	a
+	jp	z,clx
+	ld	bc,(linel)
+	ld	a,(linex)
+	add	a,3
+	sub	c
+	ld	(xc),a
+	ld	(stop1),a
+	ld	a,(liney)
+	inc	a
+	inc	a
+	ld	(yc),a
+	ld	a,$01
+	call	pixel
+	jr	z,cls0b
+	xor	a
+	ld	(linet),a
+cls0b:	xor	a
+	call	pixel
+	jp	clx
+cls1:	; Vertical line
+	call	vLineTest	; check if a ball hit the line
+	ld	a,(lineb)	; bottom side
+	or	a
+	jr	z,cls1a
+	ld	bc,(linel)
+	ld	a,(liney)
+	add	a,c
+	ld	(yc),a
+	ld	(stop2),a
+	ld	a,(linex)
+	inc	a
+	inc	a
+	ld	(xc),a
+	ld	a,$01
+	call	pixel
+	jr	z,cls1c
+	xor	a
+	ld	(lineb),a
+cls1c:	xor	a
+	call	pixel
+cls1a:	ld	a,(linet)	; top side
+	or	a
+	jp	z,clx
+	ld	bc,(linel)
+	ld	a,(liney)
+	add	a,3
+	sub	c
+	ld	(yc),a
+	ld	(stop1),a
+	ld	a,(linex)
+	inc	a
+	inc	a
+	ld	(xc),a
+	ld	a,$01
+	call	pixel
+	jr	z,cls1b
+	xor	a
+	ld	(linet),a
+cls1b:	xor	a
+	call	pixel
+clx:	ld	bc,(linet)	; if line hasn't moved, turn it off & fill area(s)
+	ld	a,(lineb)
+	or	c
+	jp	nz,player
+	xor	a
+	ld	(linel),a
+
+;---------= Fill area =----------
+	call	ballx
+	; first, figure out what area(s) if any need to be filled
+	ld	a,(lined)
+	or	a
+	jp	nz,sideFill
+;-----> up fill
+	ld	a,(liney)
+	ld	(yc),a
+	inc	a
+	inc	a
+	ld	(filly2),a
+	ld	a,(linex)
+	inc	a
+	inc	a
+	ld	(xc),a
+	ld	a,(stop1)
+	ld	(fillx1),a
+	ld	a,(stop2)
+	ld	(fillx2),a
+fillAreaUp:
+	call	fillPixel
+	jr	z,contFillUp
+	ld	a,(yc)
+	ld	(filly1),a
+	jp	endFillUp
+contFillUp:
+	ld	hl,yc
+	dec	(hl)
+	jp	fillAreaUp
+endFillUp:
+	call	checkQuad
+	call	nz,fillIt
+;-----> down fill
+	ld	a,(liney)
+	inc	a
+	inc	a
+	ld	(filly1),a
+	inc	a
+	inc	a
+	ld	(yc),a
+	ld	a,(linex)
+	inc	a
+	inc	a
+	ld	(xc),a
+fillAreaDown:
+	call	fillPixel
+	jp	z,contFillDown
+	ld	a,(yc)
+	ld	(filly2),a
+	jp	endFillDown
+contFillDown:
+	ld	hl,yc
+	inc	(hl)
+	jp	fillAreaDown
+endFillDown:
+	jp	endFill
+;-----> Now check sides
+sideFill:
+;-----> Fill Left
+	ld	a,(linex)
+	ld	(xc),a
+	inc	a
+	inc	a
+	ld	(fillx2),a
+	ld	a,(liney)
+	inc	a
+	inc	a
+	ld	(yc),a
+	ld	a,(stop1)
+	ld	(filly1),a
+	ld	a,(stop2)
+	ld	(filly2),a
+fillLeft:
+	call	fillPixel
+	jp	z,contFillLeft
+	ld	a,(xc)
+	ld	(fillx1),a
+	jp	endFillLeft
+contFillLeft:
+	ld	hl,xc
+	dec	(hl)
+	jp	fillLeft
+endFillLeft:
+	call	checkQuad
+	call	nz,fillIt
+	ld	a,(linex)
+	inc	a
+	inc	a
+	ld	(fillx1),a
+	inc	a
+	inc	a
+	ld	(xc),a
+	ld	a,(liney)
+	inc	a
+	inc	a
+	ld	(yc),a
+fillRight:
+	call	fillPixel
+	jr	z,contFillRight
+	ld	a,(xc)
+	ld	(fillx2),a
+	jp	endFillRight
+contFillRight:
+	ld	hl,xc
+	inc	(hl)
+	jp	fillRight
+endFillRight:
+endFill:
+	call	checkQuad
+	call	nz,fillIt
+	call	ballx
+	call	player
+	pop	hl	; don't return
+	jp	skipdelay	; make it seem faster
+
+loadVars:
+	ret
+fillPixel:
+	ld	a,(xc)
+	ld	de,(yc)
+	call	ionGetPixel
+	and	(hl)
+	ret
+checkQuad:
+; check if a ball is in the quadrent (fillx1,filly1)-(fillx2,filly2)
+; z=0 if no ball z=1 if ball
+	ld	bc,(nballs-1)
+	ld	hl,balls
+checkQuadLoop:
+	ld	a,(fillx1)
+	cp	(hl)
+	jp	nc,checkQuadS1
+	ld	a,(fillx2)
+	dec	a
+	cp	(hl)
+	jp	c,checkQuadS1
+	inc	hl
+	ld	a,(filly1)
+	cp	(hl)
+	jp	nc,checkQuadS2
+	ld	a,(filly2)
+	dec	a
+	cp	(hl)
+	jp	c,checkQuadS2
+	xor	a
+	ret
+checkQuadS1:
+	inc	hl
+checkQuadS2:
+	inc	hl
+	inc	hl
+	djnz	checkQuadLoop
+	inc	a
+	ret
+
+;------> Fill the quadrent!
+; This large routine filles the area (fillx1,filly1)-(fillx2,filly2)
+; It writes entire bytes instead of just bits for speed
+fillIt:	; first calculate amount of area to be filled for scoring
+	ld	a,(fillx2)
+	ld	bc,(fillx1)
+	sub	c
+	ld	h,0
+	ld	l,a		; hl=amount per line
+	ld	e,a
+	ld	d,h		; de=hl (for multiply)
+	ld	a,(filly2)
+	ld	bc,(filly1)
+	sub	c
+	inc	a
+	sbc	hl,de
+fillItL0:
+	add	hl,de
+	dec	a
+	jp	nz,fillItL0
+	ld	de,(temp)
+	add	hl,de
+	ld	(temp),hl	; add to temp
+	ld	de,-3000
+	add	hl,de		; subtract roughly 70%
+	jp	nc,fillItNoWin
+	; we have a winner
+	ld	de,(score)
+	add	hl,de
+	ld	de,100
+	add	hl,de
+	ld	(score),hl	; add left over to score
+	ld	a,2
+	ld	(lflag),a	; tell the main loop we won!
+fillItNoWin:
+	; now fill the area on the screen
+	ld	de,$0000
+	ld	a,(fillx1)
+	and	7
+	ld	b,a
+	ld	a,8
+	sub	b
+	jp	z,fillItS1
+	ld	b,a
+fillItL1:
+	scf
+	rl	d
+	djnz	fillItL1
+fillItS1:
+	ld	a,(fillx2)
+	and	7
+	jp	z,fillItS2
+	ld	b,a
+fillItL2:
+	scf
+	rr	e
+	djnz	fillItL2
+fillItS2:
+	ld	hl,(filly1)
+	ld	h,0
+	ld	b,h
+	ld	c,l
+	add	hl,bc
+	add	hl,bc
+	add	hl,hl
+	add	hl,hl
+	ld	bc,gbuf
+	add	hl,bc
+	ld	bc,(fillx1)
+	ld	b,$00
+	srl	c
+	srl	c
+	srl	c
+	add	hl,bc	; hl now points to where to begin writing
+	ld	a,(fillx2)
+	srl	a
+	srl	a
+	srl	a
+	sub	c
+	ld	c,a	; c=x loops
+	ld	a,d
+	or	a
+	jp	z,fillItC1
+	dec	c
+	bit	7,c
+	jp	z,fillItC1
+	inc	c
+	ld	d,c
+	ld	e,c
+fillItC1:
+	ld	a,(filly1)
+	ld	b,a
+	ld	a,(filly2)
+	sub	b
+	ld	b,a	; b now holds the number of times to loop for ys
+fillItL3:
+	push	bc
+	push	hl
+	ld	a,d
+	or	a
+	jp	z,fillItF1
+	ld	a,(hl)
+	or	d
+	ld	(hl),a	; write beginning
+	inc	hl
+fillItF1:
+	ld	a,c
+	or	a
+	jp	z,fillItS3
+	ld	a,$FF
+fillItL4:		; write middle
+	ld	(hl),a
+	inc	hl
+	dec	c
+	jp	nz,fillItL4
+fillItS3:
+	ld	a,(hl)
+	or	e
+	ld	(hl),a	; write end
+	pop	hl
+	ld	bc,12
+	add	hl,bc
+	pop	bc
+	djnz	fillItL3
+	inc	a
+	ret
+
+;---------- Check if a ball hit the line ----------
+; Two routines in one (hLineTest and vLineTest).
+; This routine could be added to the one above,
+; but it is aready way too big!
+hLineTest:	; line goes right to left
+	ld	bc,(linel)
+	ld	a,(linex)
+	add	a,c
+	inc	a
+	ld	e,a		; e holds end
+	ld	a,(linex)
+	sub	c
+	sub	5
+	bit	7,a
+	jr	z,hlts0
+	xor	a
+hlts0:	ld	d,a		; d holds start
+	ld	bc,(nballs-1)
+	ld	hl,balls	; hl holds ball offset
+hltl1:	inc	hl		; ballx - not needed yet
+	ld	a,(hl)
+	ld	c,a
+	ld	a,(liney)
+	add	a,4+1
+	cp	c
+	jr	c,hlts2
+	sub	4+1+5
+	cp	c
+	jr	nc,hlts2
+	dec	hl		; now we need ballx
+	ld	a,(hl)
+	inc	hl
+	cp	e
+	jr	nc,hlts2
+	cp	d
+	jr	c,hlts2
+	ld	a,1
+	ld	(lflag),a
+hlts2:	inc	hl
+	inc	hl
+	djnz	hltl1
+	ret
+VLineTest:			; line goes up and down
+	ld	bc,(linel)
+	ld	a,(liney)
+	add	a,c
+	inc	a
+	ld	e,a		; e holds end
+	ld	a,(liney)
+	sub	c
+	sub	5
+	bit	7,a
+	jr	z,vlts0
+	xor	a
+vlts0:	ld	d,a		; d holds start
+	ld	bc,(nballs-1)
+	ld	hl,balls	; hl holds ball offset
+vltl1:	ld	c,(hl)
+	inc	hl
+	ld	a,(linex)
+	add	a,4+1
+	cp	c
+	jr	c,vlts2
+	sub	4+1+5
+	cp	c
+	jr	nc,vlts2
+	ld	a,(hl)		; now we need bally
+	cp	e
+	jr	nc,vlts2
+	cp	d
+	jr	c,vlts2
+	ld	a,1
+	ld	(lflag),a
+vlts2:	inc	hl
+	inc	hl
+	djnz	vltl1
+	ret
+
+;---------= Pixel =---------
+; input: xc,yc; a={0-test, 1-set}
+; output: flag z=state (0=off, 1=on)
+pixel:	push	de	; don't destroy de
+	di
+	ex	af,af'	; faster than a push
+	ld	de,(yc)
+	ld	a,(xc)
+	call	ionGetPixel
+	ld	b,a
+	ex	af,af'
+	or	a
+	ld	a,b
+	jr	nz,pixelTest
+	or	(hl)
+	ld	(hl),a
+pixelTest:
+	and	(hl)
+	pop	de
+	ret
+
+;---------= Draw a sprite =---------
+sprite:	ld	ix,(loc)
+	ld	a,(xc)
+	ld	hl,(yc)
+	ld	b,5
+	jp	ionPutSprite
+
+;---------= Sprites =---------
+ball:	.db	%01100000	; 4*4, but the sprite routine thinks it's 5*x
+	.db	%11110000
+	.db	%11110000
+	.db	%01100000
+
+hsym:	.db	%00000000	; 5*5
+	.db	%00100000
+	.db	%11111000
+	.db	%00100000
+	.db	%00000000
+
+vsym:	.db	%00100000	; 5*5
+	.db	%00100000
+	.db	%01110000
+	.db	%00100000
+	.db	%00100000
+
+;---------= Dialog =---------
+winner:	.db	$08,"You Won!"
+losser:	.db	$08,"You lost"
+name:	.db	$0D,"JezzBall v1.2",$00
+about:	.db	"by Joe Wingbermuehle",$00
+info1:	.db	"2nd - Start Game",$00
+info2:	.db	"ALPHA - Options",$00
+info3:	.db	"DEL - Exit",$00
+info4:	.db	"Up/Down - Level: ",$00
+info5:	.db	"ALPHA - Speed: ",$00
+info6:	.db	"2nd - OK",$00
+info7:	.db	"DEL - Cancel",$00
+hscr:	.db	"HiScore:",$00
+nhs:	.db	"New High Score",0
+levtxt:	.db	"Lev: ",0
+blank:	.db	"  ",0
+lifepic:
+	.db	%01010000	; 4*6
+	.db	%11111000
+	.db	%11111000
+	.db	%01110000
+	.db	%00100000
+
+highscore:
+	.dw	0
+speed:	.db	2
+slev:	.db	1
+
+hiScore:
+	push	hl
+	xor	a
+	sbc	hl,de
+	pop	hl
+	jr	z,hsnnhs
+	jr	nc,hsnhs
+hsnnhs:	ex	de,hl
+	inc	a
+	ret
+hsnhs:	or	a
+	ret
+
+;---------= The JezzBall Graphic =---------
+jezzball:
+	.db	%00001111,%00000000
+	.db	%00011011,%00011100
+	.db	%00000011,%00111010
+	.db	%00000011,%00111110
+	.db	%00000011,%00111110
+	.db	%00000011,%00011100
+	.db	%11000011,%00000000
+	.db	%11000011,%00000110
+	.db	%01111110,%00001101
+	.db	%00111100,%00001111
+	.db	%00000000,%00000110
+	.db	%00001111,%11000000
+	.db	%00011000,%01100000
+	.db	%00011111,%11100010
+	.db	%00011000,%00000111
+	.db	%00011000,%01100010
+	.db	%00001111,%11000000
+	.db	%00000000,%00000000
+	.db	%00000011,%11111100
+	.db	%01000000,%00001100
+	.db	%11100000,%00110000
+	.db	%01000000,%11000000
+	.db	%00000011,%00000000
+	.db	%01100011,%11111100
+	.db	%11010000,%00000000
+	.db	%11110000,%11111111
+	.db	%01100000,%00000011
+	.db	%00000000,%00001100
+	.db	%00010000,%00110000
+	.db	%00111000,%11000000
+	.db	%00010000,%11111111
+
+
+.end
+END

@@ -1,0 +1,42 @@
+Orbix v2.0 by Joe Wingbermuehle 19990824
+by Joe Wingbermuehle
+08-15-1998
+
+>Requirements
+Requires a TI-83 or a TI-83 Plus with Ion.
+
+>Installation
+For the TI-83: Send orbix.83p to your calculator.
+For the TI-83 Plus: Send orbix.8xp to your calculator.
+
+>Description
+Orbix is a game very similar to Othello I'm told (I've never played
+Othello). I got the idea from the TI-86 version of Orbix. I did
+change a few things though, such as the scoring. Anyway, if
+you're not familiar with either: Orbix is a puzzle game where you try
+to fill up the screen with your pieces. However, you have an opponent
+(the calculator takes this role) that is trying to do the same. You
+can only place one of your pieces next to another one of your own
+pieces, or next to a calculator's piece if it, or another one of the
+calculator's pieces, is touching one of your pieces in the same
+direction. You can only move horizontally or vertically. You can only
+take empty spaces, however, if you jump one or more of the calculator's
+pieces, those will become your pieces. You always start the game taking
+the black pieces (the calculator uses the white pieces). If you are the
+calculator can not make a legal move, the other player must move until
+the game is over or a move becomes possible.
+
+>History:
+Version 1.0 <> 19980815
+	Size: 1830 bytes
+	-First release!
+Version 2.0 <> 19990824
+	TI-83 Size:	1783 bytes
+	TI-83Plus Size:	1788 bytes
+	-Optimized for Ion! Now works on both the TI-83
+	 and the TI-83 Plus!
+	-Fixed the "impossible" level.
+
+Joe Wingbermuehle
+http://joewing.net
+

@@ -1,0 +1,55 @@
+zmPW v2.1 by Joe Wingbermuehle 20000105
+
+>Requirements
+A TI-83 or a TI-83 Plus with Ion.
+
+>Installation
+TI-83:		Send zmpw.83g to your calculator.
+TI-83 Plus: 	Send zmpw.8xg to your calculator.
+
+>Description
+zmPW is an Ion module that provides powerful password protection.
+
+>Directions
+After sending zmPW to your calculator and running Ion, you will be
+prompted for a password. Press [MODE] to set a password or [ENTER] to
+continue without a password. Ion will continue to prompt for a
+password while zmPW is installed at Ion startup, shutdown, and when
+you press [X,T,n] until you change the settings. To change your settings
+enter your current password and press [MODE]. Now enter a new password.
+Press [ENTER]. zmPW will now ask if you want it to require a password
+on Ion startup. Press [1] if you do or [0] if you do not. Next zmPW
+will ask if you want it to require a password to exit Ion.
+Choose your password carefully. If you forget your password or type
+it incorrectly you will have to reset your calculor (or resend zmPW
+if you catch your error in time).
+Using [MODE] in your password will not work!
+You password may be up to eight keystrokes.
+
+>Notes
+-Modules do not work from Flash (applies only to the TI-83 Plus).
+
+>History
+PW - The SOS/AShell program
+Version 1.0 <> 19980530
+	Size: 190 bytes
+	-First release
+Version 1.1 <> 19990220
+	Size: 176 bytes
+	-Smaller.
+zmPW - The SOS module.
+Version 1.0 <> 19990625
+	Size: 327 bytes
+	-Now an SOS module with many enhancements!
+zmPW - The Ion module.
+Version 2.0 <> 19991021
+	Size: 303 bytes
+	-Now an Ion module!
+	-Better than Ion version.
+Version 2.1 <> 20000105
+	Size: 301 bytes
+	-Changed shutdown key from [GRAPH] to [X,T,n]
+	-Updated for Ion v1.3 or later.
+
+Joe Wingbermuehle
+http://joewing.net

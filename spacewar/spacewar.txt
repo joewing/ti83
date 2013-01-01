@@ -1,0 +1,46 @@
+ /      \      /
+ \ pace  \    / ar
+ /        \/\/     v2.0
+=-=-=-=-=-=-=-=-=-=-=-=-=-
+->by Joe Wingbermuehle
+First release:	19980607
+This release:	19990824
+
+>Requirements
+Requires a TI-83 or a TI-83 Plus with Ion.
+
+>Installation
+For the TI-83: Send spacewar.83p to your calculator.
+For the TI-83 Plus: Send spacewar.8xp to your calculator.
+
+>Game Play
+Use the arrow keys to move and [2nd] to shoot. The object of the game
+is to defeat the flying saucers. The flying saucers cannot shoot you,
+but they will kill you if you run into them or they run into you.
+Also, they can leave behind bombs that will kill you when they blow up
+if you are too close! After defeating all the flying saucers in a level
+you move on to the next level. Each level has 1 more flying saucer then
+the previous. There are 15 levels total. To pause press [MODE], to quit
+press [DEL]. GOOD LUCK!
+
+>History
+Version 1.0 <> 19980607
+	Size: 1372 bytes
+	-First public release
+Version 2.0 <> 19990824
+	TI-83 Size:	1257 bytes
+	TI-83Plus Size:	1262 bytes
+	-Optimized for Ion! Now runs on both the TI-83
+	 and the TI-83 Plus!
+
+
+>Credits
+Thanks to the following:
+	-Alex Lamkin - gave me the basic game idea
+	-Tim Redmond - gave me some good ideas
+	-Dan Englender - more good ideas
+	-Everyone else who I forgot to mention!
+
+Joe Wingbermuehle
+http://joewing.net
+

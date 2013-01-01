@@ -1,0 +1,164 @@
++-------------------------------------------------------+
+|			 Breakout v2.0			|
+|		     by Joe Wingbermuehle		|
+|	           	  19990824			|
++-------------------------------------------------------+
+
+>Requirements
+Breakout is an Ion game for the TI-83 and TI-83 Plus.
+It requires a TI-83 or a TI-83 Plus as well as Ion.
+
+>Installation
+For the TI-83: Copy breakout.83g to your calculator.
+For the TI-83 Plus: Copy breakout.8xg to your calculator.
+
+>Description
+The classic game of Breakout on the TI-83(+)! This version has
+17 types of falling blocks, external levels, and much more!
+
+>Keys for game play
+[<] and [>] - move the paddle.
+[2nd] - Throws the ball/fires the gun.
+[MODE] - Pauses & shuts down the calculator.
+[CLEAR] - Takes away a life and puts the ball on the paddle.
+[DEL] - Exits the game.
+There are menus to guide you through the rest.
+
+>External levels
+Breakout supports external levels ([MODE] at the menu screen).
+Load them onto your calculator and Breakout will automatically
+detect them. Note: external levels much be in RAM (not Flash).
+See BOutdev.txt for more information on making external levels.
+
+>Falling Blocks
+Here is a list of all the different types of falling blocks.
++----------+
+| X   X X  |	Gives you an extra life.
+|XXX XXXXX |
+| X   XXX  |
+|      X   |
++----------+
+|     X X  |	Takes away a life.
+|XXX XXXXX |
+|     XXX  |
+|      X   |
++----------+
+|    XX    |	Gives you 50 points.
+|   XXXX   |
+|  X XX X  |
+|    XX    |
++----------+
+|    XX    |	Takes away 50 points.
+|  X XX X  |
+|   XXXX   |
+|    XX    |
++----------+
+|  XX      |	Gives you 2 times more points when you hit a block.
+|   X X X  |	Gives 100 points for the +50 point falling block.
+|  X   X   |	Takes away 25 points for the -50 point falling block.
+|  XX X X  |
++----------+
+| X     X  |	Takes you up one level.
+|XXX X XXX |
+| X XXX X  |
+|    X     |
++----------+
+|          |	Takes you down one level.
+|XXX   XXX |
+|   XXX    |
+|          |
++----------+
+|   XXX    |	Restarts the current level.
+|   X  X   |
+|   XXX    |
+|   X  X   |
++----------+
+|          |	Makes your paddle longer.
+|  X    X  |
+| XXXXXXXX |
+|  X    X  |
++----------+
+|          |	Makes your paddle shorter.
+| X      X |
+|  XXXXXX  |
+| X      X |
++----------+
+|       X  |	Makes the paddle move in the opposite direction.
+|  X  XXXX |
+| XXXX  X  |
+|  X       |
++----------+
+|          |	Makes the ball stick to the paddle.
+|    XX    |	This bonus wears off after a few seconds.
+| XXXXXXXX |
+|          |
++----------+
+|  X XX X  |	Makes the ball heavy so that it breaks the bricks
+| X XXXX X |	without bouncing off of them.
+| X XXXX X |	This bonus wears off after a few seconds.
+|  X XX X  |
++----------+
+|          |	Creates a line along the bottom of the screen for
+|          |	the ball to bounce off of.
+|XXXXXXXXXX|	This bonus wears off after a few seconds.
+|          |
++----------+
+|          |	Makes your paddle a machine gun. Shot using [2nd].
+| X      X |	This bonus wears off after a few seconds.
+| XXXXXXXX |
+|          |
++----------+
+|          |	Crazy ball. Causes your ball to move unpredictably.
+| X X X X  |	This bonus wears off after a few seconds.
+|  X X X X |
+|          |
++----------+
+There is one more bonus. It randomly flashes through all the bonuses.
+You get whatever it is at when your paddle hits it.
+
+>History:
+Version 1.0 <>
+	-first release!
+	-10 levels
+Version 1.1 <>
+	-fixed a bug
+	-added 5 new falling blocks (12 total)
+	-the falling blocks are now random
+	-15 different block styles
+	-[DEL] during game play takes away a life
+Version 1.2 <>
+	-Optimized for SOS!
+Version 1.3 <>
+	-Fixed the "10-level" bug.
+	-Optimized the program a little.
+Version 1.4 <> 19980530
+	Size: 2938 bytes
+	-All levels are external (program is smaller)
+	-Optimized the program... a lot
+	-Made it work with my Install program.
+Version 1.5 <> 19981001
+	Size: 3048 bytes
+	-Shuts down when you press [MODE].
+	-Exits when you press [DEL].
+	-Takes away a life when you press [CLEAR].
+	-Added side collision detection.
+	-Changed the "tunnel" blocks to "blocker" blocks.
+	-Added 5 new falling blocks.
+	-Rounded the sides of the blocks.
+	-Added an option for the frequency of the bonuses.
+	-Some other stuff...
+Version 2.0 <> 19990824
+	TI-83 Size:	2975 bytes
+	TI-83Plus Size:	2980 bytes
+	-Optimized for Ion! Now runs on both the TI-83 and
+	 the TI-83 Plus!
+	-Removed the sound feature.
+
+>To be added:
+	-Possible a bonus to have the ball split into three...
+	-You tell me!
+
+
+Joe Wingbermuehle
+http://joewing.net
+

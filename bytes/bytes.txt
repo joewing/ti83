@@ -1,0 +1,40 @@
+Bytes v2.0 by Joe Wingbermuehle 19990824
+
+>Requirements
+Requires a TI-83 or a TI-83 Plus with Ion.
+
+>Installation
+For the TI-83: Send bytes.83g to your calculator.
+For the TI-83 Plus: Send bytes.8xg to your calculator.
+
+>Object
+Get the dots! But don't run into anything including yourself!
+Use the arrow keys to move. The menus are there to guide you through
+the rest.
+
+>External Levels
+The level sets for Bytes are external. The Standard Level set that
+comes with Bytes is called ZBYSTD. See the source to ZBYSTD for info
+on making Bytes levels.
+Thanks to Tim Redmond (Quija13) for making the first level set!
+
+>History
+Version 1.0 <> 19980615
+	Size: 1577 bytes
+	-First Release!
+Version 1.1 <> 19990220
+	Size: 1392 bytes
+	-Pause changed to shut down.
+	-Options screen is no longer a secret.
+	-Last level now wraps back to the first level.
+	-Improved interface.
+	-Better sprites.
+	-Smaller.
+Version 2.0 <> 19990824
+	TI-83 Size:	1341 bytes
+	TI-83Plus Size:	1347 bytes
+	-Optimized for Ion! Now works on both the TI-83
+	 and the TI-83 Plus!
+
+Joe Wingbermuehle
+http://joewing.net

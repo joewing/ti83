@@ -1,0 +1,59 @@
++-------------------------------------------------------+
+|		        JezzBall v2.0			|
+|		     by Joe Wingbermuehle		|
+|			 19990824			|
++-------------------------------------------------------+
+
+>Requirements
+Requires a TI-83 or a TI-83 Plus with Ion.
+
+>Installation
+For the TI-83: Send jezzball.83p to your calculator.
+For the TI-83 Plus: Send jezzball.8xp to your calculator.
+
+>Object
+The object of the game is to fill as much of the screen
+as possible so that the ball(s) have a small area in
+which to move around.  To do this you must draw lines
+which fill the area of the screen that no balls exist
+in if a side of the line does not contain any balls.  It
+is complicated because your line moves slowly and if a
+ball hits it while it is still drawing, you loss a life.
+The score starts at 100 and ticks down as you play. If it
+hits zero, you loose a life and start at 100 again.
+Therefore the faster you fill the screen, the higher your
+score!
+
+>Usage
+Use the arrow keys to move, [2nd] to start a line, [ALPHA]
+to change the direction of the line that you can draw,
+[MODE] to pause, and [DEL] to quit.
+The menus should be self-explanitory except for the options
+menu. Use [ALPHA] to change the speed and the arrow keys to
+change the start level.
+
+>History
+Version 1.0 <> 19980703
+	-First release!
+Version 1.1 <> 19980704
+	-Fixed the bug that sometimes causes you to loose a life
+	 when you should not.
+	-Made the menus for the "Options" screen better.
+	-Optimized a few routines (now it is much faster when you
+	 fill part of the screen).
+Version 1.2 <> 19980816
+	Size: 2472
+	-I fixed the bug that caused more of the screen to fill up
+	 than really should sometimes.
+Version 2.0 <> 19990824
+	TI-83 Size:	2440 bytes
+	TI-83Plus Size:	2445 bytes
+	-Optimized for Ion! It will now run on both the TI-83
+	 and the TI-83 Plus!
+
+>Credits
+Dan Englender - tested it many times and reported bugs.
+Anybody else I forgot to mention.
+
+Joe Wingbermuehle
+http://joewing.net

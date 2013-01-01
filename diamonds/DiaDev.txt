@@ -1,0 +1,110 @@
+Level developer notes for Diamonds.
+See diamonds.txt for information on Diamonds.
+
+Here is the format for the level data files:
+
+;----- Start of asm file -----
+	.db		"Dia1JW"	; tells Diamonds that this
+					; is a level data file.
+	.db		%00000000	; data for changing certain things.
+					; see the comment below for custom data.
+	.db		39		; bytes to beginning of level data
+
+	; ------------- optional diamond definitions
+
+blockD:	.db		01111111b
+	.db		10101010b
+	.db		10101010b
+	.db		10101010b
+	.db		10101010b
+	.db		01111111b
+	.db		10000000b
+	.db		11000000b
+	.db		11000000b
+	.db		11000000b
+	.db		11000000b
+	.db		10000000b
+blockE:	.db		01111111b
+	.db		10101111b
+	.db		10101111b
+	.db		10101111b
+	.db		10101111b
+	.db		01111111b
+	.db		10000000b
+	.db		11000000b
+	.db		11000000b
+	.db		11000000b
+	.db		11000000b
+	.db		10000000b	
+
+	; ----------------- end of optional diamond definitions.
+
+	.db		"Level Name"	; name of the level
+	.db		0		; necessary zero for termination of level name
+	.db		11		; length of level name (includes the 0)
+	.db		0,0		; high score info (recommended value=0)
+	.db		1		; number of levels (1=1 level)
+	
+	.db		$00,$00,$00,$00		; level data
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		$00,$00,$00,$00
+	.db		5,5,1,1		; ballx,bally,start/normal diamonds,last diamonds
+
+	; more levels here.......
+.end	; tell TASM that the file is finished
+END
+;----- End of asm file -----
+
+-Custom data byte:
+This byte is needed to pass data about the level set to Diamonds.
+Usage:
+	*******1 - Arrow change block is breakable
+	******1* - Go back to level 1 after winning the last level
+	***111** - Number of points until new life (add 1 and mult 100)
+	*11***** - Starting point for the bonus (add 1 and mult 30)
+	1******* - Unused (may be used for indicating more data after the
+			custom blocks in future versions) Set to 0!
+
+-Custom Diamonds:
+You can use your own custom diamonds + change block by putting two 12 byte blocks after the
+Custom data byte.  The order is: diamonds then diamond change block.  Note: if you do not
+use these blocks, you do not need to fill out this data (just skip it).
+
+-Block definitions:
+Here is a list of all the blocks/diamonds; what they do and their values.
+$0 Nothing 				$8 zig-zag diamond 
+$1 Thin border - first blocks 		$9 zig-zag diamond change block 
+$2 spotted diamond 			$A blocker block 
+$3 spotted diamond change block		$B lock 
+$4 bordered diamond 			$C key 
+$5 bordered diamond change block	$D custom
+$6 thick border - last 			$E custom change block
+$7 killer block				$F direction swap block
+
+There are two blocks to a byte.  The blocks are side-by-side.  For example, if you had
+$6 and $7 next to each other you would have $67.
+If you use blocks D and E it is HIGHLY recommended that you fill out the custom diamond area!
+However, not doing so will have no bad effects on your calculator (the custom diamonds will
+just look wierd).
+
+-The last four bytes of each level:
+Last four bytes of each level are:
+	-beginning x coordinate of ball
+	-beginning y coordinate of ball
+	-number of normal blocks (includes first blocks and keys/locks)
+	-number of last blocks (thick bordered blocks)
+
+-Odds and ends:
+	-Each level set can have between 1 and 99 levels
+	-The name you choose for the level file can be ANYTHING between 1 and 8 characters!
+	-The description can be anything that fits on the screen!
+	-You MUST use SQUISH or an equivalent compression utility to compress the levels.
+
+That should be it!  See the source to the included level file for more info.

@@ -1,0 +1,31 @@
+Maze v1.0
+by Joe Wingbermuehle
+20001017
+
+>Requirements
+Requires a TI-83 with Ion or a TI-83Plus with Ion.
+
+>Installation
+For the TI-83: Send maze.83g to your calculator.
+For the TI-83 Plus: Send maze.8xg to your calculator.
+
+>Object
+The object of the game is to solve the maze in as little time and with as few
+moves as possible. The score starts at 9000 and decreases by 5 with every move.
+Also, every few seconds a point is taken away. The end of the maze will always
+be in the lower right corner of the maze, marked by an "X" symbol.
+There are 6 different mazes sizes each with a separate high score.
+
+>Usage
+Use the arrow keys to move. [DEL] exits the game and [MODE] pauses.
+After you solve the maze, press any key to continue.
+The menus should be self-explainitory.
+
+>History
+Version 1.0 <> 20001017
+	TI-83 Size:	1376 bytes
+	TI-83Plus Size:	1383 bytes
+	-First release
+
+Joe Wingbermuehle
+http://joewing.net

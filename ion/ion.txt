@@ -1,0 +1,240 @@
+  _________
+ /\__    __\
+ \/_/\   \_/
+    \ \   \      _________    ___  _____
+     \ \   \    /\   ___  \  /\  \/ __  \
+      \ \   \   \ \  \  \  \ \ \   /_/\  \
+       \ \   \   \ \  \  \  \ \ \  \ \ \  \
+        \_\   \__ \ \  \__\  \ \ \  \ \ \  \
+       /\________\ \ \________\ \ \__\ \ \__\
+       \/________/  \/________/  \/__/  \/__/  v1.6
+----------<by Joe Wingbermuehle 20000617>----------
+
+See my home page (http://joewing.net) for more
+information on Ion and Ion programming.
+
+>Upgrade Note
+If you are upgrading from Ion v1.0 or Ion v1.1 please
+reset the RAM before installing this version. Do this
+by selecting [2nd] [+] [7] [1] [2] (TI-83 Plus) or
+[2nd] [+] [5] [1] [2] (TI-83).
+You may want to save your programs before doing this.
+This does not apply to those using Ion v1.2 or later.
+If you do not follow these instructions, your
+calculator will leak around 2k of RAM and may become
+unstable.
+
+>Background
+Ion is a shell for both the TI-83 Plus and the TI-83.
+It provides an efficient means for creating and using
+programs on both calculators.
+
+>Requirements
+A TI-83 or TI-83 Plus.
+A TI-Graph Link or equivalent.
+ If you don't know what this is, you do not have
+ one. This most likely did NOT come with your
+ calculator.  See www.ti.com or some other calculator
+ web site for more information.
+
+>Installation
+Send ion.8xg to your TI-83 Plus or
+Send ion.83g to your TI-83.
+To send to your calculator using the Graph-Link
+software, select [Link|Send To|RAM] for the
+TI-83 Plus or [Link|Send] for the TI-83.
+Run prgmION.
+Now run prgmA any time you want to run Ion. You
+may delete prgmION and prgmIONZ if you like. However,
+if you plan on sending Ion to someone else's
+calculator, you must send those files to properly
+install Ion.
+
+>Description
+Ion is an assembly language shell for the TI-83 and
+the TI-83 Plus. Unlike other shells, this shell uses
+a new relocation method that allows assembly language
+programs to take advantage of all ROM calls, while
+also allowing any program to run with less than 40
+bytes of free memory. It also uses an improved
+program format, which makes Ion programs smaller than
+either AShell or SOS programs.
+Here is a list of additional features:
+	-Basic Shell Features
+		-Allows any assembly language program
+		 to be run with less than 40 bytes of
+		 free memory.
+		-Allows for modules, which allow one to
+		 customize the Ion interface.
+		-Automatically detects assembly language
+		 programs.
+		-Automatically moves programs to and
+		 from Flash as needed (TI-83 Plus only).
+		-Allows external levels to be stored in
+		 Flash (TI-83 Plus only).
+		-Contains a built in function library.
+		-Program write-back.
+		-Requires little memory.
+	-Navigational Features
+		-Allows for as many programs as your
+		 calculator can hold!
+		-Eight programs visible at a time.
+		-Right/Left arrow keys allow you to easily
+		 scroll through your programs.
+	-Power Saving Features
+		-Automatically powers down after a
+		 minute or so of inactivity.
+		-Uses little power while active.
+
+>Keys
+Run program:	[Y=] or [ENTER]
+Move cursor:	[(up)] or [(down)]
+Next list:	[(right)]
+Previous list:	[(left)]
+Exit Ion:	[MODE]
+Power Down:	[ON]
+
+>Files
+The following files are included in ion.8?g
+-prgmION	The Ion installer
+-prgmIONZ	Data file for the installer
+-prgmZMINFO	Status bar module
+
+>Notes/Troobleshooting
+-Please read this entire file throughly before asking
+ for help or submitting a bug!
+-TI-83 and TI-83 Plus programs are not compatable at
+ the binary level. You must send the correct program
+ to your calculator if it is to work.
+ TI-83 programs have the *.83p extension and
+ TI-83 Plus programs have the *.8xp extension.
+-Ion should say "Ion Installed!" after being run. If
+ it does not, you probably do not have enough free
+ memory.
+-Although Ion can run programs from Flash (only on the
+ TI-83 Plus, of course), it is recommended that you
+ place the programs you use most often in RAM. There
+ are two reasons for this: it is slower for Ion to swap
+ between Flash and RAM every time a program is executed
+ and it is not good for the Flash to be written to
+ frequently. This isn't much to be concerned over, but
+ it is good to keep in mind.
+-Modules must be located in RAM to run.
+-If a program that is stored in Flash refuses to run
+ you probably do not have enough free RAM to execute it.
+ Move some stuff out of RAM to make room for the program.
+-If you get a message asking to do a garbage collect
+ in Ion, always select "yes"
+-External level files for most programs can be stored in
+ Flash ROM (TI-83Plus). However, high scores etc, which
+ may be stored with the external level, will be lost
+ each time you exit the program or switch level sets.
+-See http://joewing.calc.org for more information.
+
+>Bugs
+This version of Ion should be bug-free. Nevertheless,
+there is always something I overlook!
+Before reporting bugs please read this document fully!
+Most "bug" reports I get are easily solved if only the
+user would read this document! If you do not give me
+enough information to find the problem your bug report
+will be ignored. The more information the better.
+Please email bug reports to joewing@calc.org with a
+subject of "Ion Bug Report". Thank you!
+
+>Misc Issues
+It is unlikely that Ion will cause your calculator any
+harm. However, I cannot be held responsible for any
+damage to your calculator. Afterall, Ion is freeware!
+
+>History
+Non-public releases are not documented.
+Project Started: 19990623
+Version 1.0 <> 19990824
+	TI-83 size: 	1746 bytes (less once installed)
+	TI-83Plus size: 1801 bytes (less once installed)
+	-First release!
+Version 1.1 <> 19991009
+	TI-83 size:	1741 bytes (1392 once installed)
+	TI-83Plus size:	1804 bytes (1546 once installed)
+	-Fixed the bug that caused the TI-83 version to eat
+	 memory if installed more than once.
+	-Fixed the bug that caused the symbol table to
+	 become corrupt.
+	-Fixed the problem with ionFastCopy that caused the
+	 screen to become garbled.
+	-Now clears the graph screen on exit.
+	-Fixed a bug in the TI-83 Plus version that caused
+	 some crashes.
+	-Fixed a bug in the TI-83 Plus version that caused
+	 some programs to detect external levels incorrectly.
+Version 1.2 <> 19991121
+	TI-83 size:	1742 bytes (1420 once installed)
+	TI-83Plus size:	1795 bytes (1571 once installed)
+	NOTE: This version is not compatible with previous
+	      versions! Reset the RAM before installing by
+	      selecting [2nd] [+] [7] [1] [2] installing.
+	      You may want to save your programs first.
+	-Fixed a bug that caused some crashes.
+	-Added the ability to go to the previous list.
+Version 1.3 <> 20000101 - Ring in the new year with Ion!
+	TI-83 size:	1764 bytes (1431 once installed)
+	TI-83Plus size:	1783 bytes (1549 once installed)
+	-Y2K OK
+	-Major improvements to the module code. Forced
+	 restart now works properly and reruns all
+	 modules with keycode 1. Modules now run at the
+	 proper location on the TI-83 (fixes some
+	 crashes). Module detection number changed to
+	 a two (all modules must be reassembled)!
+	-Improved program detection code; fixes the
+	 reinstall problems that occurred periodically.
+Version 1.4 <> 20000103
+	TI-83 size:	1592 bytes (1375 once installed)
+	TI-83Plus size:	1725 bytes (1491 once installed)
+	-Fixed a bug in the TI-83 Plus module code.
+	-Added another module event: program selection.
+	 Program selection is code 2.
+	-Now the bottom line of the Ion screen is blank
+	 unless a module is installed. zmInfo, included
+	 in ion.8xg and ion.83g, displays the
+	 standard bottom line.
+	-Compensated for a bug in the TI-83 Plus ROM
+	 that caused running prgmA to have no effect
+	 sometimes.
+	-Optimized a little more.
+Version 1.5 <> 20000519
+	TI-83 size:	1535 bytes (1318 once installed)
+	TI-83Plus size:	1626 bytes (1392 once installed)
+	-Improved the program loader. Now Ion is much
+	 smaller and more stable.
+	-Fixed a bug that sometimes caused problems
+	 when running TI-83Plus archived programs.
+	-Now external levels (for most programs) can
+	 be used from Flash ROM (TI-83Plus). Note that
+	 saving level data does not work when the
+	 level is in Flash ROM.
+Version 1.6 <> 20000617
+	TI-83 size:	1529 bytes (1312 once installed)
+	TI-83Plus size:	1630 bytes (1396 once installed)
+	-Fixed the bug in the ionDetect library routine
+	 which caused some programs to crash on the
+	 TI-83 Plus. Unfortunately, this added to the
+	 program size for the TI-83 Plus.
+	-Shaved off a few bytes here and there.
+	-The source code is now included.
+
+>Credits
+Thank you to the following people:
+	-Dan Englender (aka Dulce) - Helped me immensely
+	 with figuring out TI-83 Plus oddities. He also
+	 tested Ion trillions of times.
+	-Brandon Whaley (aka Red Picasso) - Gave me the
+	 information I needed to create Ion.
+	-You, for using Ion!
+	-All the people that encouraged me to finish
+	 this project.
+I'm sorry if I missed anyone!
+
+Joe Wingbermuehle
+http://joewing.calc.org

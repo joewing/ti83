@@ -1,0 +1,40 @@
+Breakout Level Developer Notes.
+See breakout.txt for game info.
+
+I recommend using a level name that starts with a "ZBL"
+or at least a "Z" however niether is necessary.
+
+The levels for Breakout are set up as follows:
+-"BO1JW" (BreakOut format 1 by Joe Wingbermuehle)
+-number of bytes to start of level
+-level name
+-$00
+-number of bytes in the level name (including the zero)
+-high score (2 bytes)
+-number of levels
+-start of levels (33 bytes each)
+
+Each level is 33 bytes:
+-blocks (32 bytes)
+-number of blocks (1 byte)
+	-1 hit blocks count as 1
+	-2 hit blocks count as 2
+
+The blocks are as follows:
+	0 - nothing
+	1-7 - 1 hit (multiple styles, experiment!)
+	8-E - 2 hit (multiple styles, experiment!)
+	F - nonbreaking
+There are two blocks to a byte.
+For example $18 would be block 1 next to block 8.
+The levels are therefore 8 blocks (4 bytes) by 8 blocks (8 bytes).
+This is what level one looks like:
+	.db	$00,$00,$00,$00
+	.db	$00,$00,$00,$00
+	.db	$89,$AB,$CD,$E8
+	.db	$12,$34,$56,$71
+	.db	$00,$00,$00,$00
+	.db	$00,$00,$00,$00
+	.db	$00,$00,$00,$00
+	.db	$00,$00,$00,$00
+	.db	24

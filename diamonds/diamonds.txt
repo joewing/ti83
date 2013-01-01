@@ -1,0 +1,129 @@
++-------------------------------------------------------+
+|			Diamonds v2.0			|
+|		     by Joe Wingbermuehle		|
+|		      19970610  19990824		|
++-------------------------------------------------------+
+
+>Requirements
+This game requires a TI-83 or a TI-83 Plus with Ion.
+
+>Installation
+For a TI-83: Send diamonds.83g to your calculator.
+For a TI-83 Plus: Send diamonds.8xg to your calculator.
+
+>Description
+Diamonds is a Breakout-type game with a twist.  Instead
+of moving a paddle to prevent the ball from hitting the
+ground, you move the ball, which moves vertically, right
+and left to get certain diamonds.
+
+>Object
+The object of the game is to get all the diamonds in as
+little time as possible.  There is a ticking bonus.
+Therefore the faster you get the diamonds, the higher
+your score will be.
+
+>Descriptions of the Blocks
+The blocks with a cross in them kill you.  The blocks
+that are half black and then have a pattern change the
+type of diamond you can get to that pattern.  The diamonds
+with the thin border you must get first or loss a life to
+get.  The diamonds with the thick border you must get last.
+The mostly black blocks with the six dots do not do
+anything except stop the ball from going in that direction.
+The block with the two little arrows switches the direction
+that the arrow keys move the ball.  Lastly, there are lock
+and key blocks.  You must get the key before you can get
+the lock (you can only have one key at a time).
+
+>Keys
+Use right and left arrow keys to move and [CLEAR] to
+start a level over (this takes away a life).
+To pause a game press [MODE] and [ON] to continue.
+To quit a game press [DEL].
+There are menus for the rest
+
+>History
+Version 0.1 <> 19970610
+	-first beta release
+	-only 2 levels
+Version 0.2
+	-three levels
+	-menus
+	-high score
+	-practice option
+Version 0.3
+	-four levels
+	-another live every 256 points
+	-more optimized
+Version 0.4
+	-just fixed an ugly bug (4 bytes smaller too)
+Version 1.0
+	-six levels
+	-switched some of the levels around
+	-took away the extra life every 256 points
+	-fixed up the program a little
+Version 1.1
+	-eight levels
+	-fixed some minor bugs (bet you didn't even notice)
+	-made the diamonds disappear faster
+	-compressed the program by 50% using zasmload from TI!
+	-optimized the program a little
+Version 1.2
+	-27 levels!!!
+	-added an option to start on any level
+Version 1.3
+	-compressed the levels
+	-removed the practice option
+	-changed a few things around
+Version 1.4
+	-uses a different sprite routine (smaller and faster)
+	-made the program smaller
+	-converted for use with AShell
+Version 1.5
+	-added keys/locks
+	-added a direction switch block
+	-changed the look of one set of blocks
+	-added custom blocks (level set defined)
+	-fixed up a few things in the coding
+	-supports "add-on" levels (see DiaDev.txt for more info)
+	-10 "Standard Levels" built into the game, all the rest
+	 are add-ons
+	-separate high score for each level set
+	-extra life every 400 points (can be defined by add-on levels)
+	-displays your score when paused
+	-tells you if you do or do not get a bonus
+	-Night/day mode
+	-more graphical menu screen
+	-sound
+Version 1.6 <> 19980313
+	-cleaned up a few things in the coding (not much)
+	-added "MODE - Level Name" because of popular complain
+Version 1.7
+	-optimized it for SOS!
+Version 1.8 <> 19980530
+	Size: 2771 bytes
+	-Fixed up the code a little
+	-Made ALL levels external because of popular complain (Quija13)
+	-Changed the level detection string (all levels will need
+		to be reassembled - I might make a converter).
+Version 1.9 <> 19981024
+	Size: 2214 bytes
+	-Optimized the code
+	-Took out the options screen and the night/day mode.
+	-Pause feature now turns off the calculator.
+	-The keys have been changed slightly (see Keys).
+	-Fixed up the game to appear nicer.
+Version 2.0 <> 19990824
+	TI-83 Size:	2140 bytes
+	TI-83Plus Size:	2146 bytes
+	-Optimized for Ion! Now runs on both the TI-83 and the TI-83 Plus.
+
+>Credits
+Thanks to the following:
+	Dan Englender - Tested the game many times and gave me many good ideas.
+	Tim Redmond - Tested the game and gave me ideas.
+
+Joe Wingbermuehle
+http://joewing.net
+

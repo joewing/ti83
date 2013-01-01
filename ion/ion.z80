@@ -1,0 +1,202 @@
+; The Executable Ion Installer
+; Joe Wingbermuehle 20000103
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Special TI-83 Plus Flash ROM Calls
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#ifdef TI83P
+_ldAindPaged	=$501D
+_ldHLindPaged	=$501A
+_flashToRam	=$5017
+;_archUnarch	=$4FD8
+;_enoughRam	=$42FD
+#endif
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Constants
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#ifdef TI83P
+#define ION_DISPLACEMENT		3+2	; the 2 is for the TIOS bug...
+#else
+#define ION_DISPLACEMENT		1
+#endif
+#define	myLocation			progstart+ION_DISPLACEMENT
+#define VERSION_MAJOR			1	; Version (major)
+#define VERSION_MINOR			6	; Version (minor)
+#define ION_COMPATIBILITY		0	; Ion compatibility number
+#define	LIBRARY_COMPATIBILITY		0	; Library compatibility number
+#define NUMBER_OF_LIBRARIES		8	; Number of library routines
+#define MODULE_COMPATIBILITY		2	; Module compatibility number
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Pointers
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#define	ionStart	iionStart
+#define	ionEnd		iionEnd
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Ion Installer Header
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	#include	"ion.inc"
+
+	.org	progstart-11
+
+#ifdef TI83P
+	.db	$BB,$6A		; Asm(
+#endif
+#ifdef TI83
+	.db	"ç9"		; Send(9
+#endif
+	.db	"_IONZ?Ù?*"	; prgmIONZ:Stop:"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Beginning of Ion Installer Code
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	ld	hl,iprogend+iion-iionStart
+	ld	de,iion
+	ld	b,3
+icheckIDLoop:
+	ld	a,(de)
+	cp	(hl)
+	jr	nz,inotInstalled
+	inc	hl
+	inc	de
+	djnz	icheckIDLoop
+	inc	hl
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ld	hl,iprogend
+	bcall(_deletemem)
+inotInstalled:
+	ld	hl,ianame
+	rst	20h
+	bcall(_chksysvar)
+#ifdef TI83P
+	jr	c,iaNonexistant
+	bcall(_delvar)
+iaNonexistant:
+#else
+	call	nc,_delvar
+#endif
+	ld	hl,iaend-iastart
+	push	hl
+#ifdef TI83P
+	bcall(_createprotprog)
+#else
+	bcall(_createprog)
+#endif
+	pop	bc
+#ifdef TI83
+	ld	(hl),6
+#endif
+	inc	de
+	inc	de
+	ld	hl,iastart
+	ldir
+
+	ld	hl,ilname
+	rst	20h
+	bcall(_chksysvar)
+#ifdef TI83P
+	jr	c,ilNonexistant
+	bcall(_delvar)
+ilNonexistant:
+#else
+	call	nc,_delvar
+#endif
+	ld	hl,ilend-ilstart
+	push	hl
+#ifdef TI83P
+	bcall(_createprotprog)
+#else
+	bcall(_createprog)
+#endif
+	pop	bc
+#ifdef TI83
+	ld	(hl),6
+#endif
+	inc	de
+	inc	de
+	ld	hl,ilstart
+	ldir
+
+	ld	hl,iinstallerStart
+	ld	de,sram
+	ld	bc,iinstallerEnd-iinstallerStart
+	push	de
+	ldir
+	ret
+
+iinstallerStart:
+	ld	de,iionStart-progstart		; amount to delete
+	ld	hl,progstart
+	bcall(_deletemem)			; install Ion
+	ld	hl,ifinishedtxt-iinstallerStart+sram
+	bcall(_puts)
+#ifdef TI83P
+	bcall(_newline)
+	ret
+#else
+	jp	_newline
+#endif
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Data for Installation
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----> Text and Names
+ifinishedtxt:
+	.db	"Ion Installed",0
+iinstallerEnd:
+
+#ifdef TI83
+;-----> prgmA for the TI-83
+ianame:	.db	5,"A",0						; 5
+iastart:
+	.db	"ç9_[ION?á"	; Send(9prgm[ION:ClrHome	; 9
+iaend:
+;-----> prgm[ION for the TI-83
+ilname:	.db	5,"[ION",0					; 8
+ilstart:
+	.db	"00?Ô?0000?Ô"	; 00:End:0000:End
+	; nop
+ilend:
+#endif
+
+#ifdef TI83P
+;-----> prgmA for the TI-83 Plus
+ianame:	.db	6,"A",0
+iastart:
+	.db	$BB,$6A,"_[ION?á",0	; Asm(prgm[ION:ClrHome
+iaend:
+;-----> prgm[ION for the TI-83 Plus
+ilname:	.db	6,"[ION",0
+ilstart:
+	.db	$BB,$6D		; AsmPrgm
+	jp	Restart-ionStart+myLocation
+ilend:
+#endif
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Ion System Code
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+iionStart:
+#ifdef TI83P
+	; The jump cannot be here due to a TIOS bug.
+	; TI doesn't compensate for the size
+	; bytes when running an asm program. The jump has been
+	; moved to prgm[ION to fix this.
+#else
+	jp	Restart-ionStart+myLocation
+#endif
+iion:	.db	"ION",ION_COMPATIBILITY	; Identifier
+	.dw	iionEnd-iionStart
+	#include	"ionf.z80"	; The Ion function library
+	#include	"ionm.z80"	; The main Ion program
+iionEnd:
+
+iprogend:
+
+.end
+; End of Ion Installer by Joe Wingbermuehle

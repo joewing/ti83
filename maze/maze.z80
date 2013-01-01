@@ -1,0 +1,769 @@
+; Maze by Joe Wingbermuehle 20001017
+
+	.nolist
+	#include	"ion.inc"
+	.list
+
+#define NUMBER_OF_SIZES	6
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Variables
+maze	=sram+0		; pointer to maze matrix, 2 bytes
+height	=sram+2		; maze height, 1 byte
+width	=sram+3		; maze width, 1 byte
+mazex	=sram+4		; maze current x coordinate, 1 byte
+mazey	=sram+5		; maze current y coordinate, 1 byte
+px	=sram+6		; temporary x coordinate, 1 byte
+py	=sram+7		; temporary y coordinate, 1 byte
+xoffset	=sram+8		; starting x offset of the current view point
+yoffset	=sram+9		; starting y offset of the current view point
+moves	=sram+10	; current score
+count	=sram+12	; count between score decrements
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Ion Header
+#ifdef TI83P
+	.org	progstart-2
+	.db	$BB,$6D
+#else
+	.org	progstart
+#endif
+	ret
+	jr	nc,Start
+name:	.db	"Maze v1.0",0
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Start of the program
+Start:
+	bcall(_clrscr)
+	call	DrawMenu
+	ld	hl,$170A
+	ld	(pencol),hl
+	ld	hl,menuStart
+	bcall(_vputs)
+	ld	de,$1E0A
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,$250A
+	ld	(pencol),de
+	bcall(_vputs)
+MainMenuLoop:
+	bcall(_getk)
+	cp	54	; 2nd
+	jp	z,BeginGame
+	cp	48	; alpha
+	jr	z,ChangeSize
+	cp	56
+	ret	z
+	jr	MainMenuLoop
+
+ChangeSize:
+	ld	hl,currentSize
+	inc	(hl)
+	ld	a,(hl)
+	cp	NUMBER_OF_SIZES
+	jr	nz,Start
+	ld	(hl),0
+	jr	Start
+
+DrawMenu:
+	bcall(_clrscr)
+	res	7,(iy+20)
+	ld	hl,4*256+0
+	ld	(currow),hl
+	ld	hl,name
+	bcall(_puts)
+	ld	bc,$0037
+	ld	de,$5E37
+	bcall(_darkline)
+	ld	hl,$0901
+	ld	(pencol),hl
+	ld	hl,aboutString
+	bcall(_vputs)
+	ld	hl,$3801
+	ld	(pencol),hl
+	ld	hl,highScoreString
+	bcall(_vputs)
+	ld	hl,$3201
+	ld	(pencol),hl
+	ld	hl,sizeString
+	bcall(_vputs)
+	ld	bc,(currentSize-1)
+	ld	hl,sizes-10
+	ld	de,10
+	inc	b
+drawMenuLoop:
+	add	hl,de
+	djnz	drawMenuLoop
+	bcall(_vputs)
+	ld	a,(hl)
+	ld	(width),a
+	inc	hl
+	ld	a,(hl)
+	ld	(height),a
+	inc	hl
+	ld	de,$3827
+	ld	(pencol),de
+	bcall(_ldhlind)
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,6
+	bcall(_dispop1a)
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Generate the maze and start the game
+BeginGame:
+	bcall(_clrscr)
+	ld	hl,0
+	ld	(currow),hl
+	ld	hl,(height)
+	bcall(_htimesl)
+	ld	de,20
+	add	hl,de
+	push	hl
+	bcall(_memfree)
+	pop	de
+	; hl=available, de=needed
+	xor	a
+	ld	(count),a
+	sbc	hl,de
+	jr	nc,enoughMemory
+	ld	hl,memoryError
+	bcall(_puts)
+memoryWaitLoop:
+	bcall(_getk)
+	or	a
+	jr	z,memoryWaitLoop
+	jp	Start
+enoughMemory:
+	ld	hl,waitString
+	bcall(_puts)
+	ld	hl,9000
+	ld	(moves),hl
+
+	ld	hl,tempProgName
+	rst	20h
+	ld	hl,(height)
+	bcall(_htimesl)		; hl=memory to allocate
+	bcall(_createprog)
+	ex	de,hl
+	inc	hl
+	inc	hl
+	ld	(maze),hl
+	call	GenerateMaze
+
+; Find a valid offset
+	ld	hl,0
+	ld	(xoffset),hl
+	ld	bc,4*256+7
+	call	LookUp
+	jr	nz,viewOk
+	ld	hl,xoffset
+	inc	(hl)
+	ld	bc,4*256+8
+	call	LookUp
+	jr	nz,viewOk
+	ld	hl,yoffset
+	inc	(hl)
+	ld	bc,5*256+8
+	call	LookUp
+	jr	nz,viewOk
+	ld	hl,xoffset
+	dec	(hl)
+viewOk:
+MainLoop:
+	call	DrawView
+	call	GetMyLocation
+	call	LookUp
+	cp	2
+	jp	z,SolvedMaze
+InputLoop:
+	ld	hl,count
+	inc	(hl)
+	ld	a,(hl)
+	and	%00111111
+	call	z,DecScore
+	bcall(_getk)
+	dec	a	; 1 down
+	jr	z,MoveDown
+	dec	a	; 2 left
+	jr	z,MoveLeft
+	dec	a	; 3 right
+	jr	z,MoveRight
+	dec	a	; 4 up
+	jr	z,MoveUp
+	sub	55-4	; 55 mode
+	jr	z,Pause
+	dec	a	; 56 del
+	jr	z,StopGame
+	jr	InputLoop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Deallocate memory and exit game
+StopGame:
+	ld	hl,tempProgName
+	rst	20h
+	bcall(_chksysvar)
+	bcallnc(_delvar)
+	jp	Start
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Shut off calculator
+Pause:
+	inc	a	; a should be 0 on entry
+	out	(3),a
+	ei
+	halt
+	jr	InputLoop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Make a move
+MoveUp:
+	call	GetMyLocation
+	dec	b
+	call	LookUp
+	jr	z,InputLoop
+	ld	hl,yoffset
+	dec	(hl)
+	call	UpdateScore
+MainLoop_rel:
+	jr	MainLoop
+
+MoveDown:
+	call	GetMyLocation
+	inc	b
+	call	LookUp
+	jr	z,InputLoop
+	ld	hl,yoffset
+	inc	(hl)
+	call	UpdateScore
+	jr	MainLoop
+
+MoveRight:
+	call	GetMyLocation
+	inc	c
+	call	LookUp
+	jr	z,InputLoop
+	ld	hl,xoffset
+	inc	(hl)
+	call	UpdateScore
+	jr	MainLoop
+	
+MoveLeft:
+	call	GetMyLocation
+	dec	c
+	call	LookUp
+	jr	z,InputLoop
+	ld	hl,xoffset
+	dec	(hl)
+	call	UpdateScore
+	jr	MainLoop_rel
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Update score
+UpdateScore:
+	ld	hl,(moves)
+	ld	de,-5
+	add	hl,de
+updateScoreCont:
+	ld	(moves),hl
+	ld	a,h
+	and	128
+	ret	z
+	ld	hl,0
+	ld	(moves),hl
+	ret
+
+DecScore:
+	ld	hl,(moves)
+	dec	hl
+	call	updateScoreCont
+	jp	DrawView
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Maze has been solved, update high score etc
+SolvedMaze:
+	call	DrawMenu
+	ld	hl,4*256+3
+	ld	(currow),hl
+	ld	hl,solvedString
+	bcall(_puts)
+	ld	hl,2*256+4
+	ld	(currow),hl
+	ld	hl,scoreString
+	bcall(_puts)
+	ld	hl,(moves)
+	bcall(_disphl)
+
+	ld	hl,sizes-10+8
+	ld	bc,(currentSize-1)
+	inc	b
+	ld	de,10
+solvedMazeHSLoop:
+	add	hl,de
+	djnz	solvedMazeHSLoop
+	push	hl
+	bcall(_ldhlind)
+
+	ld	de,(moves)
+	or	a
+	push	de
+	sbc	hl,de
+	pop	de
+	pop	hl
+	jr	nc,solvedMazeNoHS
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	ld	hl,1*256+5
+	ld	(currow),hl
+	ld	hl,newHighScoreString
+	bcall(_putps)
+solvedMazeNoHS:
+
+solvedMazeWaitLoop:
+	bcall(_getk)
+	or	a
+	jr	z,solvedMazeWaitLoop
+	jp	StopGame
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Set bc=(xoffset,yoffset)
+GetMyLocation:
+	ld	a,(xoffset)
+	add	a,7
+	ld	c,a
+	ld	a,(yoffset)
+	add	a,4
+	ld	b,a
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Draw View Point
+; IN: width=maze width, height=maze height
+;     maze->maze matrix, yoffset=startting y coordinate
+;     xoffset=starting x coordinate
+; OUT: view point is drawn
+
+; sprites are 6x6, screen is 96x64
+; so 16 horizontal, 10 vertical, 4 pixels left over at bottom...
+DrawView:
+	bcall(_cleargbuf)
+	ld	b,10	; vertical
+	ld	a,(yoffset)
+	ld	(mazey),a
+	xor	a
+	ld	(py),a
+drawViewVert:
+	push	bc
+	xor	a
+	ld	(px),a
+	ld	b,16
+	ld	a,(xoffset)
+	ld	(mazex),a
+drawViewHorz:
+	push	bc
+	ld	a,(mazex)
+	ld	bc,(width)
+	dec	c
+	cp	c
+	jr	nc,drawViewSkip
+	ld	a,(mazey)
+	ld	bc,(height)
+	dec	c
+	cp	c
+	jr	nc,drawViewSkip
+	ld	bc,(mazex)
+	call	LookUp
+	add	a,a	; 2
+	ld	c,a
+	add	a,a	; 4
+	add	a,c	; 6
+	ld	l,a
+	ld	h,0
+	ld	de,mazeSprites
+	add	hl,de
+	push	hl
+	pop	ix
+	ld	b,6
+	ld	a,(px)
+	ld	hl,(py)
+	call	ionPutSprite
+drawViewSkip:
+	ld	hl,mazex
+	inc	(hl)
+	ld	a,(px)
+	add	a,6
+	ld	(px),a
+	pop	bc
+	djnz	drawViewHorz
+	ld	hl,mazey
+	inc	(hl)
+	ld	a,(py)
+	add	a,6
+	ld	(py),a
+	pop	bc
+	djnz	drawViewVert
+
+	; draw player
+	ld	b,6
+	ld	a,41
+	ld	l,24
+	ld	ix,playerSprite
+	call	ionPutSprite
+
+	ld	hl,(moves)
+	ld	a,h
+	or	l
+	jr	z,drawMovesSkip
+
+	ld	b,3
+	xor	a
+	ld	l,60
+	ld	ix,scoreStartSprite
+	call	ionPutSprite
+	ld	bc,(moves-1)
+	ld	hl,(moves)
+	ld	a,2
+drawMovesLoop:
+	push	af
+	push	hl
+	ld	l,60
+	ld	b,3
+	ld	ix,scoreMiddleSprite
+	call	ionPutSprite
+	pop	hl
+	pop	af
+	inc	a
+	ld	de,-100
+	add	hl,de
+	jr	c,drawMovesLoop
+
+	ld	b,3
+	ld	l,60
+	ld	ix,scoreEndSprite
+	call	ionPutSprite
+drawMovesSkip:
+	jp	ionFastCopy
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Generate the maze
+GenerateMaze:
+
+	; Initialize to 0
+	ld	hl,(width)
+	ld	a,(height)
+	ld	h,a
+	bcall(_htimesl)
+	ld	b,h
+	ld	c,l
+	ld	hl,(maze)
+	ld	de,(maze)
+	inc	de
+	xor	a
+	ld	(hl),a
+	ldir
+
+	; Top and bottom border
+	ld	bc,(height-1)
+	dec	b
+	ld	c,0
+	call	LookUp
+	ld	de,(maze)
+	ld	bc,(width-1)
+	ld	a,1
+generateMazeLoop1:
+	ld	(hl),a
+	ld	(de),a
+	inc	hl
+	inc	de
+	djnz	generateMazeLoop1
+
+	; Right and left border
+	ld	bc,(width)
+	dec	c
+	ld	b,0
+	call	LookUp
+	ld	de,(maze)
+	ld	bc,(height-1)
+	ld	a,1
+generateMazeLoop2:
+	ld	(hl),a
+	ld	(de),a
+	push	bc
+	ld	bc,(width)
+	ld	b,0
+	add	hl,bc
+	ex	de,hl
+	add	hl,bc
+	ex	de,hl
+	pop	bc
+	djnz	generateMazeLoop2
+
+	ld	bc,2*256+2
+	call	LookUp
+	ld	(hl),1
+
+	; Main generation loop
+	ld	a,2
+	ld	(mazex),a
+generateMazeXLoop:
+	ld	a,2
+	ld	(mazey),a
+generateMazeYLoop:
+	ld	bc,(mazex)
+	call	LookUp
+	jp	z,generateMazeContinue
+	inc	hl
+	ld	a,(hl)
+	or	a
+	jr	z,generateMazeStart
+	dec	hl
+	dec	hl
+	ld	a,(hl)
+	or	a
+	jr	z,generateMazeStart
+	inc	hl
+	ld	de,(width)
+	ld	d,0
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	jr	z,generateMazeStart
+	sbc	hl,de
+	sbc	hl,de
+	ld	a,(hl)
+	or	a
+	jp	nz,generateMazeContinue
+generateMazeStart:
+	ld	hl,mazex
+	ld	de,px
+	ld	bc,2
+	ldir
+	ld	b,4
+	call	ionRandom
+	ld	b,5
+generateMazeILoop:
+	push	bc
+	push	af
+	ld	bc,(px)
+	call	LookUp
+	ld	de,(width)
+	ld	d,0
+	pop	af
+	push	af
+	or	a
+	jr	nz,generateMazeDir1
+	add	hl,de
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	add	hl,de
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	sbc	hl,de
+	ld	(hl),1
+	ld	hl,py
+	inc	(hl)
+	inc	(hl)
+	jr	generateMazeMoved
+generateMazeDir1:
+	dec	a
+	jr	nz,generateMazeDir2
+	sbc	hl,de
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	sbc	hl,de
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	add	hl,de
+	ld	(hl),1
+	ld	hl,py
+	dec	(hl)
+	dec	(hl)
+	jr	generateMazeMoved
+generateMazeDir2:
+	dec	a
+	jr	nz,generateMazeDir3
+	inc	hl
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	inc	hl
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	dec	hl
+	ld	(hl),1
+	ld	hl,px
+	inc	(hl)
+	inc	(hl)
+	jr	generateMazeMoved
+generateMazeDir3:
+	xor	a
+	dec	hl
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	dec	hl
+	cp	(hl)
+	jr	nz,generateMazeNoMove
+	inc	hl
+	ld	(hl),1
+	ld	hl,px
+	dec	(hl)
+	dec	(hl)
+generateMazeMoved:
+	pop	af
+	pop	bc
+	ld	b,4
+	push	bc
+	call	ionRandom
+	push	af
+	ld	bc,(px)
+	call	LookUp
+	ld	(hl),1
+generateMazeNoMove:
+	pop	af
+	inc	a
+	and	3
+	pop	bc
+	djnz	generateMazeILoop
+generateMazeContinue:
+	ld	hl,mazey
+	inc	(hl)
+	inc	(hl)
+	ld	a,(hl)
+	ld	bc,(height)
+	dec	c
+	cp	c
+	jp	c,generateMazeYLoop
+	ld	hl,mazex
+	inc	(hl)
+	inc	(hl)
+	ld	a,(hl)
+	ld	bc,(width)
+	dec	c
+	cp	c
+	jp	c,generateMazeXLoop
+
+	; Insert the exit
+	ld	a,(width)
+	sub	3
+	ld	c,a
+	ld	a,(height)
+	sub	3
+	ld	b,a
+	call	LookUp
+	ld	(hl),2
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Look up location (c,b) in maze matrix and return pointer (hl)
+; Destroys: af bc de hl
+LookUp:	ld	hl,(maze)
+	dec	b
+	inc	b
+	jr	z,lookUpSkip1
+	ld	de,(width)
+	ld	d,0
+lookUpLoop1:
+	add	hl,de
+	djnz	lookUpLoop1
+lookUpSkip1:
+	add	hl,bc
+	ld	a,(hl)
+	or	a
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Data
+
+; Text
+aboutString:	.db	"by Joe Wingbermuehle",0
+menuStart:	.db	"2nd - Start Game",0
+menuSize:	.db	"ALPHA - Change Size",0
+menuExit:	.db	"DEL - Exit",0
+newHighScoreString:
+		.db	14,"New "
+highScoreString:.db	"High "
+scoreString:	.db	"Score: ",0
+memoryError:	.db	"Error: Memory",0
+waitString:	.db	"Generating...",0
+solvedString:	.db	"Solved!",0
+sizeString:	.db	"Size: ",0
+
+tempProgName:	.db	5,"_maze",0
+
+; Possible Sizes
+; Name (6 chars),width.b,height.b,high score.w
+sizes:
+	.db	"15x15",0	; 0
+	.db	17,17
+	.dw	0
+
+	.db	"25x25",0	; 1
+	.db	27,27
+	.dw	0
+
+	.db	"35x35",0	; 2
+	.db	27,27
+	.dw	0
+
+	.db	"45x45",0	; 3
+	.db	47,47
+	.dw	0
+
+	.db	"55x55",0	; 4
+	.db	57,57
+	.dw	0
+
+	.db	"65x65",0	; 5
+	.db	67,67
+	.dw	0
+
+currentSize:
+	.db	0
+
+scoreStartSprite:
+	.db	%01000000
+	.db	%10000000
+	.db	%01000000
+
+scoreMiddleSprite:
+	.db	%10000000
+	.db	%00000000
+	.db	%10000000
+
+scoreEndSprite:
+	.db	%10000000
+	.db	%01000000
+	.db	%10000000
+
+; Sprites
+mazeSprites:
+	.db	%10111100	; Wall
+	.db	%10111100
+	.db	%00000000
+	.db	%11101100
+	.db	%11101100
+	.db	%00000000
+
+	.db	0,0,0,0,0,0	; empty
+
+	.db	%11001100	; Exit
+	.db	%01111000
+	.db	%00110000
+	.db	%00110000
+	.db	%01111000
+	.db	%11001100
+
+playerSprite:
+	.db	%00000000
+	.db	%00000000
+	.db	%00011000
+	.db	%00011000
+	.db	%00000000
+	.db	%00000000
+
+
+
+.end
+; End of Maze by Joe Wingbermuehle

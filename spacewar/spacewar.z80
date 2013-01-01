@@ -1,0 +1,802 @@
+; /      \      /
+; \ pace  \    / ar
+; /        \/\/     v2.0
+;  by Joe Wingbermuehle
+
+	.nolist
+	#include	"ion.inc"
+	.list
+
+#ifdef TI83P
+	.org	progstart-2
+	.db	$BB,$6D
+#else
+	.org	progstart
+#endif
+
+#define	max_aliens	15
+
+;---------= Variables =---------
+#define	storage		sram	; max storage=768 bytes
+alien_num	=storage	; number of aliens on field
+shipy		=storage+1	; ship y
+shipx		=storage+2	; ship x
+bullety		=storage+3	; bullet y
+bulletx		=storage+4	; bullet x
+bullet_active	=storage+5	; is bullet active?
+bullet_dir	=storage+6	; bullet direction
+active_ship	=storage+7	; ship direction (specifies sprite)
+alien_timer	=storage+8	; so alien doesn't move too fast
+dead		=storage+9	; 1 if dead, 0 if alive
+bomb_map	=storage+10	; count, x,y  3*10=30 bytes
+alien_map	=storage+40	; type, phase, x, y, movx, movy, count
+				; 7*max_aliens bytes
+level		=storage+145	; current level 0-15
+main_timer	=storage+146	; move bullets twice before updating
+score		=storage+147	; 2 bytes
+
+;---------= Beginning of Code =---------
+	ret
+	jr	nc,start_of_program	; not detectable until INSTALL is run
+title:	.db	"SpaceWar v2.0",0
+start_of_program:
+	ld	hl,2*256+2
+	ld	(currow),hl
+	ld	hl,title
+	bcall(_puts)
+	ld	hl,5*256+3
+	ld	(currow),hl
+	ld	hl,about1
+	bcall(_puts)
+	ld	de,2*256+4
+	ld	(currow),de
+	bcall(_puts)
+	ld	de,7
+	ld	(currow),de
+	bcall(_puts)
+	ld	hl,(high_score)
+	bcall(_disphl)
+	call	wait_key
+	xor	a
+	ld	(level),a
+	sbc	hl,hl
+	ld	(score),hl
+new_level:
+	ld	hl,level
+	inc	(hl)
+	bcall(_cleargbuf)
+	ld	a,1
+	ld	(active_ship),a
+	ld	hl,40*256+30
+	ld	(shipy),hl
+	call	draw_my_ship
+;-----> Clear out some variables
+	xor	a
+	ld	(bullet_active),a
+	ld	(main_timer),a
+	ld	(alien_timer),a
+	ld	(dead),a
+	ld	hl,bomb_map
+	ld	b,(3*10)+(max_aliens*7)
+clear_vars:
+	ld	(hl),a
+	inc	hl
+	djnz	clear_vars
+	ld	a,(level)
+	ld	(alien_num),a
+;-----> Start up aliens
+	ld	b,a
+	ld	hl,alien_map
+spawn_loop:
+	push	bc
+	ld	b,3
+	call	ionRandom
+	inc	a
+	ld	(hl),a	; type
+	push	af
+	inc	hl
+	ld	(hl),0	; phase
+	ld	d,h
+	ld	e,l
+	inc	hl
+	ld	(hl),85	; x
+	inc	hl
+	ld	b,54
+	call	ionRandom
+	inc	a
+	ld	(hl),a	; y
+	inc	hl
+	ld	b,3
+	call	ionRandom
+	dec	a
+	ld	(hl),a	; movx
+	inc	hl
+	ld	b,3
+	call	ionRandom
+	dec	a
+	ld	(hl),a	; movy
+	inc	hl
+	ld	b,20
+	call	ionRandom
+	inc	a
+	ld	(hl),a	; count
+	pop	af
+	ld	b,0
+	push	hl
+	call	draw_alien_ship
+	pop	hl
+	inc	hl
+	pop	bc
+	djnz	spawn_loop
+
+;---------= Main Loop =---------
+main:	call	move_bullet
+	ld	a,(main_timer)
+	xor	%00000001
+	ld	(main_timer),a
+	jr	z,main
+	call	move_aliens
+	call	update_bombs
+	call	collision_chk
+	ld	a,(alien_num)
+	or	a
+	jp	z,winner
+	ld	a,(dead)
+	or	a
+	jr	nz,exit
+	bcall(_copygbuf)
+	ld	a,$FF
+	out	(1),a
+	ld	a,$FE
+	out	(1),a
+	in	a,(1)
+	cp	247
+	jp	z,mup
+	cp	251
+	jp	z,mright
+	sub	253
+	jp	z,mleft
+	dec	a
+	jp	z,mdown
+	ld	a,$BF
+	out	(1),a
+	in	a,(1)
+	cp	191
+	jp	z,pause
+	cp	223
+	jp	z,fire_missle
+	cp	127
+	jr	nz,main
+exit:	bcall(_clrscr)
+	ld	hl,4*256+2
+	ld	(currow),hl
+	ld	hl,lost_text
+quit:	bcall(_puts)
+	ld	hl,2*256+4
+	ld	(currow),hl
+	ld	hl,level_text
+	bcall(_puts)
+	ld	hl,(level)
+	ld	h,0
+	bcall(_disphl)
+	ld	hl,2*256+5
+	ld	(currow),hl
+	ld	hl,score_text
+	bcall(_puts)
+	ld	hl,(score)
+	push	hl
+	bcall(_disphl)
+	pop	de
+	ld	hl,(high_score)
+	bcall(_cphlde)
+	jr	nc,not_nhs
+	ld	(high_score),de
+	ld	hl,1*256+7
+	ld	(currow),hl
+	ld	hl,nhs_text
+	bcall(_puts)
+not_nhs:
+	jp	wait_key
+
+;---------= Beat level or game =---------
+winner:	ld	a,(level)
+	cp	15
+	jp	nz,new_level
+	bcall(_clrscr)
+	ld	hl,4*256+2
+	ld	(currow),hl
+	ld	hl,win_text
+	jr	quit
+
+;---------= Move Left =---------
+mleft:	call	draw_my_ship
+	ld	a,2
+	ld	(active_ship),a
+	ld	hl,shipx
+	ld	a,(hl)
+	dec	a
+	jr	nz,end_move
+	ld	a,89
+	jr	end_move
+
+;---------= Move Right =---------
+mright:	call	draw_my_ship
+	ld	a,1
+	ld	(active_ship),a
+	ld	hl,shipx
+	ld	a,(hl)
+	inc	a
+	cp	90
+	jr	nz,end_move
+	ld	a,1
+	jr	end_move
+
+;---------= Move Up =---------
+mup:	call	draw_my_ship
+	ld	a,3
+	ld	(active_ship),a
+	ld	hl,shipy
+	ld	a,(hl)
+	dec	a
+	jr	nz,end_move
+	ld	a,58
+	jr	end_move
+
+;---------= Move Down =---------
+mdown:	call	draw_my_ship
+	ld	a,4
+	ld	(active_ship),a
+	ld	hl,shipy
+	ld	a,(hl)
+	inc	a
+	cp	59
+	jr	nz,end_move
+	ld	a,1
+end_move:
+	ld	(hl),a
+	call	draw_my_ship
+	jp	main
+
+;---------= Fire a missle =---------
+fire_missle:
+	ld	a,(bullet_active)
+	or	a
+	jr	nz,fire_exit
+	ld	a,(active_ship)
+	ld	(bullet_dir),a
+	ld	hl,(shipy)
+	inc	h
+	inc	l
+	ld	(bullety),hl
+	ld	a,1
+	ld	(bullet_active),a
+	call	draw_bullet
+fire_exit:
+	jp	main
+
+;---------= Pause =---------
+pause:	ld	a,1
+	out	(3),a
+	ei
+	halt
+	jp	main
+
+;---------= Draw my ship =---------
+draw_my_ship:
+	ld	ix,my_ships-5
+	ld	de,$0005
+	ld	bc,(active_ship-1)
+draw_my_ship_lp:
+	add	ix,de
+	djnz	draw_my_ship_lp
+	ld	hl,(shipy)
+	ld	a,h
+	ld	b,e
+	jp	ionPutSprite
+
+;---------= Update Bombs =---------
+update_bombs:
+	ld	b,10
+	ld	hl,bomb_map
+bomb_loop:
+	push	bc
+	push	hl
+	ld	a,(hl)
+	or	a
+	jr	z,bomb_not_active
+	dec	a
+	ld	(hl),a
+	ld	c,0
+	ld	ix,bomb
+	cp	21
+	jr	nz,bomb_skip0
+	inc	c
+bomb_skip0:
+	cp	11
+	jr	z,bomb_is1
+	cp	20
+	jr	nz,bomb_skip1
+bomb_is1:
+	ld	ix,bomb2
+	inc	c
+bomb_skip1:
+	cp	10
+	jr	z,bomb_is3
+	or	a
+	jr	nz,bomb_skip3
+bomb_is3:
+	ld	ix,bomb3
+	inc	c
+bomb_skip3:
+	inc	hl
+	inc	hl
+	ex	de,hl
+	ld	a,(de)
+	ld	l,a
+	dec	de
+	ld	a,(de)
+	ld	b,8
+	dec	c
+	call	z,ionPutSprite
+bomb_not_active:
+	pop	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	pop	bc
+	djnz	bomb_loop
+	ret
+
+;---------= Move Bullet =---------
+move_bullet:
+	ld	a,(bullet_active)
+	or	a
+	ret	z
+	call	draw_bullet
+	ld	a,(bullet_dir)
+	dec	a
+	jr	nz,bul_nright
+	ld	a,(bulletx)
+	inc	a
+	ld	(bulletx),a
+	cp	92
+	jr	z,bullet_not_active
+	jr	bullet_still_active
+bul_nright:	; left
+	dec	a
+	jr	nz,bul_nleft
+	ld	a,(bulletx)
+	dec	a
+	ld	(bulletx),a
+	jr	z,bullet_not_active
+	jr	bullet_still_active
+bul_nleft:	; up
+	dec	a
+	jr	nz,bul_nup
+	ld	a,(bullety)
+	dec	a
+	ld	(bullety),a
+	jr	z,bullet_not_active
+	jr	bullet_still_active
+bul_nup:	; down
+	ld	a,(bullety)
+	inc	a
+	ld	(bullety),a
+	cp	60
+	jr	nz,bullet_still_active
+bullet_not_active:
+	xor	a
+	ld	(bullet_active),a
+	ret
+bullet_still_active:
+;---------= Draw Bullet =---------
+draw_bullet:
+	ld	ix,bullet
+	ld	hl,(bullety)
+	ld	a,h
+	ld	b,3
+	jp	ionPutSprite
+
+;---------= Check for Collision =---------
+collision_chk:
+	ld	b,max_aliens
+	ld	hl,alien_map
+collision_lp:
+	push	hl
+	ld	a,(hl)
+	or	a
+	jr	z,collision_sk2
+	inc	hl	; phase
+	inc	hl	; x
+	ld	a,(shipx)
+	sub	6
+	cp	(hl)
+	jr	nc,collision_sk1
+	add	a,10
+	cp	(hl)
+	jr	c,collision_sk1
+	inc	hl
+	ld	a,(shipy)
+	sub	6
+	cp	(hl)
+	jr	nc,collision_sk1
+	add	a,10
+	cp	(hl)
+	jr	c,collision_sk1
+	ld	a,1
+	ld	(dead),a
+collision_sk1:
+	ld	a,(bullet_active)
+	or	a
+	jr	z,collision_sk2
+	pop	hl
+	push	hl
+	inc	hl	; phase
+	inc	hl	; x
+	ld	a,(bulletx)
+	cp	(hl)
+	jr	c,collision_sk2
+	sub	6
+	cp	(hl)
+	jr	nc,collision_sk2	
+	inc	hl
+	ld	a,(bullety)
+	cp	(hl)
+	jr	c,collision_sk2
+	sub	6
+	cp	(hl)
+	jr	nc,collision_sk2
+	ex	de,hl
+	dec	de	; x
+	dec	de	; phase
+	dec	de	; type
+	ld	a,(de)
+	ld	b,a
+	inc	de	; phase
+	ld	a,(de)
+	call	draw_alien_ship
+	dec	de	; type
+	xor	a
+	ld	(de),a
+	ld	hl,alien_num
+	dec	(hl)
+	ld	hl,(score)
+	inc	hl
+	ld	(score),hl
+	pop	hl
+	jr	collision_chk
+collision_sk2:
+	pop	hl
+	ld	de,$0007
+	add	hl,de
+	djnz	collision_lp
+	ld	b,10
+	ld	hl,bomb_map
+collision_lp2:
+	push	hl
+	ld	a,(hl)
+	or	a
+	jr	z,collision_sk3
+	cp	50
+	jr	nc,collision_sk3
+	inc	hl
+	ld	a,(shipx)
+	sub	8
+	cp	(hl)
+	jr	nc,collision_sk3
+	add	a,12
+	cp	(hl)
+	jr	c,collision_sk3
+	inc	hl
+	ld	a,(shipy)
+	sub	8
+	cp	(hl)
+	jr	nc,collision_sk3
+	add	a,12
+	cp	(hl)
+	jr	c,collision_sk3
+	ld	a,1
+	ld	(dead),a
+collision_sk3:
+	pop	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	djnz	collision_lp2
+	ret
+
+;---------= Start a Bomb! =---------
+start_bomb:
+	push	de
+	ld	hl,bomb_map
+	ld	b,10
+find_bomb:
+	ld	a,(hl)
+	or	a
+	jr	nz,bomb_active
+	ld	(hl),$FF
+	inc	hl	; x
+	ld	a,(de)
+	ld	(hl),a
+	inc	hl	; y
+	inc	de
+	ld	a,(de)
+	ld	(hl),a
+	ex	de,hl
+	ld	a,(de)
+	ld	l,a
+	dec	de
+	ld	a,(de)
+	ld	ix,bomb
+	ld	b,8
+	call	ionPutSprite
+	pop	de
+	ret
+bomb_active:
+	inc	hl
+	inc	hl
+	inc	hl
+	djnz	find_bomb
+	pop	de
+	ret	; oh well
+
+;---------= Move Aliens =---------
+move_aliens:
+	ld	a,(alien_timer)
+	xor	1
+	ld	(alien_timer),a
+	ret	z
+	ld	de,alien_map
+	ld	b,max_aliens
+move_alien_loop:
+	push	bc
+	push	de
+	ld	a,(de)	; type
+	or	a
+	jr	z,alien_not_active
+	ld	b,a
+	inc	de
+	ld	a,(de)	; phase
+	call	draw_alien_ship
+	ld	a,(de)
+	xor	1
+	ld	(de),a
+	inc	de	; x
+	ld	l,e
+	ld	h,d
+	inc	de	; y
+	inc	de	; movx
+	ld	a,(de)
+	ld	b,(hl)
+	add	a,b
+	ld	(hl),a
+	jr	nz,alien_skip1
+	ld	a,86
+	ld	(hl),a
+alien_skip1:
+	cp	87
+	jr	nz,alien_skip2
+	ld	a,1
+	ld	(hl),a
+alien_skip2:
+	inc	hl
+	inc	de
+	ld	a,(de)
+	ld	b,(hl)
+	add	a,b
+	ld	(hl),a
+	jr	nz,alien_skip3
+	ld	a,54
+	ld	(hl),a
+alien_skip3:
+	cp	55
+	jr	nz,alien_skip4
+	ld	a,1
+	ld	(hl),a
+alien_skip4:
+	inc	de
+	ld	a,(de)	; decrease count
+	dec	a
+	ld	(de),a
+	jr	nz,alien_still_active
+	push	de
+;-----> Get new direction
+	dec	de
+	dec	de	; movx
+	ld	b,3
+	call	ionRandom
+	dec	a
+	ld	(de),a
+	inc	de
+	ld	b,3
+	call	ionRandom
+	dec	a
+	ld	(de),a
+	inc	de
+	ld	b,20
+	call	ionRandom
+	inc	a
+	ld	(de),a
+	dec	de
+	dec	de	; y
+	dec	de	; x
+	dec	de	; phase
+	ld	a,(de)
+	ld	b,a
+	dec	de	; type
+	ld	a,(de)
+	pop	de
+alien_still_active:
+	dec	de	; movy
+	dec	de	; movx
+	dec	de	; y
+	dec	de	; x
+	ld	b,100
+	call	ionRandom
+	or	a
+	call	z,start_bomb
+	dec	de	; phase
+	dec	de	; type
+	ld	a,(de)
+	ld	b,a
+	inc	de	; phase
+	ld	a,(de)
+	call	draw_alien_ship
+alien_not_active:
+	pop	hl
+	ld	de,$0007
+	add	hl,de
+	ex	de,hl
+	pop	bc
+	djnz	move_alien_loop
+	ret
+
+;---------= Draw Alien Ship =---------
+draw_alien_ship:
+	add	a,b	; type+phase	(type starts at 1, phase at 0)
+	ld	ix,alien_ships-8
+	ld	bc,$0008
+draw_alien_ship_lp:
+	add	ix,bc
+	dec	a
+	jr	nz,draw_alien_ship_lp
+	push	de
+	inc	de	; x
+	inc	de	; y
+	ld	a,(de)
+	ld	l,a
+	dec	de	; x
+	ld	a,(de)
+	ld	b,8
+	call	ionPutSprite
+	pop	de
+	ret
+
+;---------= Wait for a keypress =---------
+wait_key:
+	ld	b,50
+key_loop1:
+	ei
+	halt
+	djnz	key_loop1
+key_loop2:
+	bcall(_getk)
+	or	a
+	jr	z,key_loop2
+	ret
+
+;=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+;-= Data -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+;=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+;---------= Sprites =---------
+bullet:	.db	%01000000
+	.db	%11100000
+	.db	%01000000
+my_ships:
+	.db	%11000000	; right
+	.db	%01100000
+	.db	%01111000
+	.db	%01100000
+	.db	%11000000
+	.db	%00011000	; left
+	.db	%00110000
+	.db	%11110000
+	.db	%00110000
+	.db	%00011000
+	.db	%00100000	; up
+	.db	%00100000
+	.db	%01110000
+	.db	%11111000
+	.db	%10001000
+	.db	%10001000	; down
+	.db	%11111000
+	.db	%01110000
+	.db	%00100000
+	.db	%00100000
+
+alien_ships:
+	; type 1
+	.db	%00001100	; phase 0
+	.db	%01101000
+	.db	%00101110
+	.db	%11100000
+	.db	%00000111
+	.db	%01110101
+	.db	%00010100
+	.db	%00110000
+
+	.db	%00101100	; phase 1
+	.db	%01001110
+	.db	%11101101
+	.db	%11100000
+	.db	%00000111
+	.db	%10110111
+	.db	%01110010
+	.db	%00110100
+	; type 3 (types are in increments of 2)
+
+	.db	%00111100
+	.db	%00011000
+	.db	%10011001
+	.db	%11111111
+	.db	%11111111
+	.db	%10011001
+	.db	%00011000
+	.db	%00111100
+
+	.db	%00100100
+	.db	%01000010
+	.db	%10000001
+	.db	%00011000
+	.db	%00011000
+	.db	%10000001
+	.db	%01000010
+	.db	%00100100
+
+bomb:	.db	%00000000
+	.db	%00000000
+	.db	%00011000
+	.db	%00111100
+	.db	%00111100
+	.db	%00011000
+	.db	%00000000
+	.db	%00000000
+bomb2:	.db	%00000000
+	.db	%00001000
+	.db	%01011010
+	.db	%00111100
+	.db	%00111110
+	.db	%01011000
+	.db	%00010010
+	.db	%00000000
+bomb3:	.db	%01010010
+	.db	%10101000
+	.db	%00011010
+	.db	%01101101
+	.db	%00110110
+	.db	%10011100
+	.db	%01100010
+	.db	%00010100
+
+;---------= Dialog =---------
+level_text:
+	.db	"Level:",0
+score_text:
+	.db	"Score:",0
+lost_text:
+	.db	"You Lost",0
+win_text:
+	.db	"You Won!",0
+high_text:
+	.db	"HiScore:",0
+nhs_text:
+	.db	"New High Score",0
+about1:	.db	"by Joe",0
+about2:	.db	"Wingbermuehle",0
+about3:	.db	"HiScore:",0
+high_score:
+	.dw	0
+
+
+.end
+END

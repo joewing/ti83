@@ -1,0 +1,69 @@
+; zmInfo by Joe Wingbermuehle 20000102
+
+#include	"ion.inc"
+#ifdef TI83P
+	.org	sram-2
+	.db	$BB,$6D
+#else
+	.org	sram
+#endif
+	ret
+	.db	$02
+	sub	$02	; Ion program selected
+	ret	nz
+
+; Clear the bottom
+	ld hl,gbuf+(57*12)
+#ifdef TI83P
+	ld bc,6*12
+	bcall($4C30)
+#else
+	ld	b,6*12
+clearBottom:
+	ld	(hl),a
+	inc	hl
+	djnz	clearBottom
+#endif
+
+; Display the name
+	ld	hl,57*256+1
+	ld	(pencol),hl
+	ld	hl,op1+1
+	push	hl
+	bcall(_vputs)
+	pop	hl
+#ifdef TI83P
+	ld	bc,-10
+#else
+	ld	bc,-5
+#endif
+	cpir
+
+; Display the size
+	ld	a,36
+	ld	(pencol),a
+	ld	hl,($FE70)
+	sbc	hl,bc
+	call	vdisphl
+
+; Display free RAM
+	ld	a,56
+	ld	(pencol),a
+	ld	hl,free
+	bcall(_vputs)
+	bcall(_memfree)
+	; fall through to next routine and return
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Display HL in small font
+vdisphl:
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	bcall(_dispop1a)
+	inc	a
+	ret
+
+free:	.db	"Free:",0
+
+.end
+; End of zmInfo by Joe Wingbermuehle

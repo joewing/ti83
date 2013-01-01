@@ -1,0 +1,74 @@
+; The Ion Install Loader
+; Joe Wingbermuehle 19991118
+
+#ifndef TI83P
+#ifndef TI83
+#define	TI83
+#endif
+#endif
+
+	.nolist
+	#include	"ion.inc"
+	.list
+
+#define	HEADER_LENGTH	11
+
+#ifdef TI83P
+	.org	progstart-2
+	.db	$BB,$6D
+#else
+	.org	progstart
+#endif
+
+	ld	hl,loaderStart
+	ld	de,sram
+	ld	bc,loaderEnd-loaderStart
+	push	de
+	ldir
+	ret
+
+loaderStart:
+	ld	(usermemoff),bc		; clean up memory (bc is 0 from the ldir)
+#ifdef TI83P
+	ld	de,loaderEnd-progstart+2
+#else
+	ld	de,loaderEnd-progstart
+#endif
+	ld	hl,progstart
+	bcall(_deletemem)
+
+	ld	hl,aion-loaderStart+sram
+	rst	20h
+	bcall(_chksysvar)
+	ret	c
+	ex	de,hl	; hl -> size
+	bcall(_ldhlind)	; hl = size
+	ld	bc,-HEADER_LENGTH
+	add	hl,bc
+	push	hl
+	bcall(_memfree)
+	pop	de
+	push	de	; de = size, hl = free
+	ld	bc,-42
+	add	hl,bc
+	or	a
+	sbc	hl,de
+	pop	hl		; hl = size
+	ret	c		; return if not enough memory
+	ld	de,progstart
+	push	hl
+	bcall(_insertmem)	; insert hl bytes at de
+	bcall(_chksysvar)	; get new location
+	ld	hl,HEADER_LENGTH+2
+	add	hl,de
+	pop	bc
+	ld	de,progstart
+	push	de
+	ldir			; load the installer
+	ret			; run the installer
+
+aion:	.db	5,"ION",0
+loaderEnd:
+
+.end
+; Ion Install Loader by Joe Wingbermuehle

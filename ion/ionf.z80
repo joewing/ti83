@@ -1,0 +1,455 @@
+; The Built-in Ion Library Routines by Joe Wingbermuehle
+
+#ifdef TI83P
+#define TI83P_USE_FLASH_DETECT
+#endif
+
+#define	randData	libraryVectors+(3*NUMBER_OF_LIBRARIES)
+
+
+;-----> Routine table
+routinePointers:
+	.dw	version-ionStart+myLocation
+	.dw	random-ionStart+myLocation
+	.dw	putSprite-ionStart+myLocation
+	.dw	largeSprite-ionStart+myLocation
+	.dw	getPixel-ionStart+myLocation
+	.dw	fastCopy-ionStart+myLocation
+	.dw	detect-ionStart+myLocation
+	.dw	decompress-ionStart+myLocation
+
+;-----> Return Ion version information
+; hl=Ion version,a=Ion compatibility number
+; d=routine compatability number
+; e=number of routines
+version:
+	ld	a,ION_COMPATIBILITY
+	ld	hl,VERSION_MAJOR*256+VERSION_MINOR
+	ld	de,LIBRARY_COMPATIBILITY*256+NUMBER_OF_LIBRARIES
+	ret
+
+;-----> Generate a random number
+; input b=upper bound
+; ouput a=answer 0<=a<b
+; all registers are preserved except: af and bc
+random:
+	push	hl
+	push	de
+	ld	hl,(randData)
+	ld	a,r
+	ld	d,a
+	ld	e,(hl)
+	add	hl,de
+	add	a,l
+	xor	h
+	ld	(randData),hl
+	sbc	hl,hl
+	ld	e,a
+	ld	d,h
+randomLoop:
+	add	hl,de
+	djnz	randomLoop
+	ld	a,h
+	pop	de
+	pop	hl
+	ret
+
+;-----> Draw a sprite
+; b=size of sprite
+; l=yc
+; a=xc
+; ix holds pointer
+putSprite:
+	ld	e,l
+	ld	h,$00
+	ld	d,h
+	add	hl,de
+	add	hl,de
+	add	hl,hl
+	add	hl,hl
+	ld	e,a
+	and	$07
+	ld	c,a
+	srl	e
+	srl	e
+	srl	e
+	add	hl,de
+	ld	de,gbuf
+	add	hl,de
+putSpriteLoop1:
+sl1:	ld	d,(ix)
+	ld	e,$00
+	ld	a,c
+	or	a
+	jr	z,putSpriteSkip1
+putSpriteLoop2:
+	srl	d
+	rr	e
+	dec	a
+	jr	nz,putSpriteLoop2
+putSpriteSkip1:
+	ld	a,(hl)
+	xor	d
+	ld	(hl),a
+	inc	hl
+	ld	a,(hl)
+	xor	e
+	ld	(hl),a
+	ld	de,$0B
+	add	hl,de
+	inc	ix
+	djnz	putSpriteLoop1
+	ret
+
+;-----> Draw a picture
+;Input:	ix->sprite
+;	a=x
+;	l=y
+;	b=height	(in pixels)
+;	c=width		(in bytes, e.g. 2 would be 16)
+;Output: nothing
+; All registers are destroyed except bc', de', hl'
+largeSprite:
+	di
+	ex	af,af'
+	ld	a,c
+	push	af
+	ex	af,af'
+	ld	e,l
+	ld	h,$00
+	ld	d,h
+	add	hl,de
+	add	hl,de
+	add	hl,hl
+	add	hl,hl
+	ld	e,a
+	and	$07
+	ld	c,a
+	srl	e
+	srl	e
+	srl	e
+	add	hl,de
+	ld	de,gbuf
+	add	hl,de
+largeSpriteLoop1:
+	push	hl
+largeSpriteLoop2:
+	ld	d,(ix)
+	ld	e,$00
+	ld	a,c
+	or	a
+	jr	z,largeSpriteSkip1
+largeSpriteLoop3:
+	srl	d
+	rr	e
+	dec	a
+	jr	nz,largeSpriteLoop3
+largeSpriteSkip1:
+	ld	a,(hl)
+	xor	d
+	ld	(hl),a
+	inc	hl
+	ld	a,(hl)
+	xor	e
+	ld	(hl),a
+	inc	ix
+	ex	af,af'
+	dec	a
+	push	af
+	ex	af,af'
+	pop	af
+	jr	nz,largeSpriteLoop2
+	pop	hl
+	pop	af
+	push	af
+	ex	af,af'
+	ld	de,$0C
+	add	hl,de
+	djnz	largeSpriteLoop1
+	pop	af
+	ret
+
+;-----> Get pixel information
+; input:	e=y coordinate
+;		a=x coordinate
+; output:	a holds data for pixel (e.g. %00100000)
+;		hl->byte where pixel is on the gbuf
+getPixel:
+	ld	d,$00
+	ld	h,d
+	ld	l,e
+	add	hl,de
+	add	hl,de
+	add	hl,hl
+	add	hl,hl
+	ld	de,gbuf
+	add	hl,de
+	ld	b,$00
+	ld	c,a
+	and	%00000111
+	srl	c
+	srl	c
+	srl	c
+	add	hl,bc
+	ld	b,a
+	inc	b
+	ld	a,%00000001
+getPixelLoop:
+	rrca
+	djnz	getPixelLoop
+	ret
+
+;-----> Copy the gbuf to the screen (fast)
+;Input:	nothing
+;Output:graph buffer is copied to the screen
+fastCopy:
+	di
+	ld	a,$80				; 7
+	out	($10),a				; 11
+	ld	hl,gbuf-12-(-(12*64)+1)		; 10
+	ld	a,$20				; 7
+	ld	c,a				; 4
+	inc	hl				; 6 waste
+	dec	hl				; 6 waste
+fastCopyAgain:
+	ld	b,64				; 7
+	inc	c				; 4
+	ld	de,-(12*64)+1			; 10
+	out	($10),a				; 11
+	add	hl,de				; 11
+	ld	de,10				; 10
+fastCopyLoop:
+	add	hl,de				; 11
+	inc	hl				; 6 waste
+	inc	hl				; 6 waste
+	inc	de				; 6
+	ld	a,(hl)				; 7
+	out	($11),a				; 11
+	dec	de				; 6
+	djnz	fastCopyLoop			; 13/8
+	ld	a,c				; 4
+	cp	$2B+1				; 7
+	jr	nz,fastCopyAgain		; 10/1
+	ret					; 10
+; Critical timings:
+;	command->command: 65
+;	command->value  : 68
+;	value  ->value  : 66
+;	value  ->command: 67
+
+;-----> Detect a file
+; input:
+;	hl=place to start looking
+;	ix->first line of data (0 terminated)
+; output:
+;	de=place stopped + 1
+;	hl->program data (after the string)
+;	z=0 if found, z=1 if not found.
+;	All registers destroyed
+detect: ld	de,(ptemp)
+	bcall(_cphlde)
+	ld	a,(hl)
+	jr	nz,detectContinue
+	inc	a
+	ret
+detectContinue:
+	push	hl
+	and	$01
+	jr	nz,detectSkip
+
+#ifdef TI83P
+	dec	hl
+	dec	hl
+	dec	hl	; hl->lsb ptr
+	ld	e,(hl)
+	dec	hl
+	ld	d,(hl)
+	dec	hl	; hl->page
+	ld	a,(hl)
+	or	a
+	push	af
+	ld	h,d
+	ld	l,e	; hl & de->program
+	jr	z,detectNoMove
+	push	hl
+	bcall(_memfree)
+	ld	bc,64
+	sbc	hl,bc
+	pop	hl
+	jr	c,detectNotEnough
+	ld	de,($9820)
+	push	ix
+	push	hl
+	push	de
+	bcall(_flashToRam)
+	pop	hl
+	push	hl
+	pop	ix
+	ld	a,10
+	add	a,(ix+9)
+	ld	e,a
+	ld	d,0	; de=flash offset
+	add	hl,de
+	ex	(sp),hl
+	add	hl,de
+	pop	de
+	ex	de,hl	; hl-temp, de-perm
+	pop	ix
+detectNoMove:
+	inc	de
+	inc	de
+	ld	c,(hl)
+	inc	hl
+	ld	b,(hl)
+	inc	hl	; hl->data in ram
+	push	bc
+	push	ix
+	pop	bc
+detectCheck:
+	ld	a,(bc)
+	or	a
+	jr	z,detectFound
+	cp	(hl)
+	inc	bc
+	inc	de
+	inc	hl
+	jr	z,detectCheck
+detectBad:
+	pop	bc
+detectNotEnough:
+	pop	af
+detectSkip:
+	pop	hl
+	ld	bc,-6
+	add	hl,bc
+	ld	b,(hl)
+	dec	hl
+detectNameLoop2:
+	dec	hl
+	djnz	detectNameLoop2
+	jr	detect
+detectFound:
+	pop	hl
+	; hl=size, de->data
+	pop	af	; a=page, f=(or a)
+	jr	z,detectInRam
+	push	de	; data
+	push	af
+	push	hl
+	bcall(_enoughRam)
+	pop	bc
+	jr	c,detectBad
+	pop	af
+	pop	hl
+	ld	de,($9820)	; tempMem
+	push	de
+	bcall(_flashToRam)
+	pop	de
+detectInRam:	; de->data in RAM
+	pop	hl	; hl->vat location
+	ld	bc,-6
+	add	hl,bc
+	ld	b,(hl)
+	inc	b
+detectNameLoop1:
+	dec	hl
+	djnz	detectNameLoop1
+	ex	de,hl
+	xor	a
+	ret
+#else
+	dec	hl		; move to ptr
+	ld	b,(hl)
+	dec	hl
+	push	hl
+	ld	h,(hl)
+	ld	l,b	; now we are at the program
+	inc	hl	; skip file length
+	inc	hl
+	push	ix
+	pop	de
+detectCheck:
+	ld	a,(de)
+	or	a
+	jr	z,detectFound
+	cp	(hl)
+	inc	de
+	inc	hl
+	jr	z,detectCheck
+detectNoGood:
+	pop	hl
+detectSkip:
+	pop	hl
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	b,(hl)
+	dec	hl
+detectNameLoop2:
+	dec	hl
+	djnz	detectNameLoop2
+	jr	detect
+detectFound:
+	ex	de,hl
+	pop	hl
+	pop	af
+	dec	hl
+	ld	b,(hl)
+	inc	b
+detectNameLoop1:
+	dec	hl
+	djnz	detectNameLoop1
+	ex	de,hl
+	xor	a
+	ret
+#endif
+
+;-----> Decompress data
+; input:
+;	hl->compressed data
+;	de->place to load data
+;	b=length of compressed data
+;	c=compression factor (1, 3, or 15)
+; output:
+;	level is decompressed
+;	hl->next byte of compressed data
+decompress:
+	di
+decompressLoop:
+	push	bc
+	ld	a,(hl)
+	ex	af,af'
+	ld	a,c
+	ld	b,8
+	cp	1
+	jr	z,dcmp1
+	ld	b,4
+	cp	3
+	jr	z,dcmp1
+	ld	b,2
+dcmp1:	push	bc
+	ld	a,c
+	ld	b,1
+	cp	1
+	jr	z,dcmp2
+	inc	b
+	cp	3
+	jr	z,dcmp2
+	ld	b,4
+dcmp2:	ex	af,af'
+dcmp3:	rlca
+	djnz	dcmp3
+	ld	b,a
+	ex	af,af'
+	ld	a,b
+	and	c
+	ld	(de),a
+	inc	de
+	pop	bc
+	djnz	dcmp1
+	inc	hl
+	pop	bc
+	djnz	decompressLoop
+	ret
+
+; End of Ion Library Routines by Joe Wingbermuehle

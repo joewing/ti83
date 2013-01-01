@@ -1,0 +1,1167 @@
+;+------------------------------------------------------+
+;|			 Diamonds v2.0			|
+;|		     by Joe Wingbermuehle		|
+;|		      19970610  19990824		|
+;+------------------------------------------------------+
+; Home page: http://joewing.net
+
+	.nolist
+	#include	"ion.inc"
+
+; Variables stored in apd ram
+storage		=sram
+xc		=storage	; x coordinate
+yc		=storage+1	; y coordinate
+lblks		=storage+2	; number of last blocks left (just see the sprites)
+level		=storage+3	; current level matrix (84 bytes)
+
+; Variables stored in instructions
+#define	dir		dir_lbl+1
+#define	winflag		winflag_lbl+1
+#define	ovrflag		ovrflag_lbl+1
+#define	tmp		tmp_lbl+1
+#define	cblk		cblk_lbl+1
+#define	blks		blks_lbl+1
+#define	lvs		lvs_lbl+1
+#define	lev		lev_lbl+1
+#define	score		score_lbl+1
+#define	tick		tick_lbl+1
+#define	xc2		xc2_lbl+1
+#define	yc2		yc2_lbl+1
+#define	key		key_lbl+1
+#define	pkey		pkey_lbl+1
+#define	numoflevs	numoflevs_lbl+1
+#define	file		file_lbl+1
+#define	curwrld		curwrld_lbl+1
+#define	lifect		lifect_lbl+1
+#define	arrowdr		arrowdr_lbl+1
+#define	cdata		cdata_lbl+1
+#define	bonstart	bonstart_lbl+1
+#define	lifepts		lifepts_lbl+1
+#define	startlev	startlev_lbl+1
+#define	tickc		tickc_lbl+1
+
+	.list
+
+#ifdef TI83P
+	.org	progstart-2
+	.dw	$6DBB
+#else
+	.org	progstart
+#endif
+
+;------------ Beginning of ASM code ------------
+	ret	; prevent the TI-OS from running this
+	jr	nc,prog_start
+name:	.db	"Diamonds v2.0",0
+prog_start:
+
+;------------ Main Menu ------------
+prmenu:	ld	a,$01
+	ld	(startlev),a
+	ld	hl,(vat)
+	ld	ix,detectstr
+	call	ionDetect
+	ret	nz
+	ld	a,(hl)
+	ld	(cdata),a
+	inc	hl
+	ld	c,(hl)
+	ld	b,$00
+	add	hl,bc
+	inc	hl
+	ld	(file),hl
+	ld	(curwrld),de
+menu:	ld	hl,(file)
+	dec	hl
+	ld	a,(hl)
+	ld	(numoflevs),a
+	call	settop
+	ld	hl,$1804
+	ld	(pencol),hl
+	ld	hl,opt1
+	bcall(_vputs)
+	ld	bc,$1F04
+	ld	(pencol),bc
+	bcall(_vputs)
+	push	hl
+startlev_lbl:
+	ld	a,0
+	bcall(_setxxop1)
+	ld	a,2
+	bcall(_dispop1a)
+	pop	hl
+	ld	bc,$2604
+	ld	(pencol),bc
+	bcall(_vputs)
+	ld	bc,$2D04
+	ld	(pencol),bc
+	bcall(_vputs)
+	ld	hl,(file)
+	dec	hl
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	c,(hl)
+	ld	b,$00
+	sbc	hl,bc
+	bcall(_vputs)
+	bcall(_copygbuf)
+menulp:	bcall(_getk)
+	or	a
+	jr	z,menulp
+	cp	48
+	jr	z,incLev
+	sub	54
+	jp	z,strtgm
+	dec	a
+	jr	z,chgwrld
+	dec	a
+	jr	nz,menulp
+	res	7,(iy+20)
+	ret
+
+incLev:	ld	hl,startlev
+	ld	a,(hl)
+	inc	a
+	ld	(hl),a
+numoflevs_lbl:
+	ld	c,0
+	inc	c
+	cp	c
+	jp	nz,menu
+	ld	(hl),0
+	jr	incLev+3
+
+;---------- Change World ----------
+; the level data is set up as follows in the level sets:
+; -"Dia1JW" (6 bytes)
+; -flag byte
+;	*******1 - arrow switch breakable
+;	******1* - wrap around to level one after beating last level
+;	***111** - number of pts until new life (add 1 and mult by 100)
+;	*11***** - start of ticking bonus (add 1 and mult by 30)
+; -length to start of level data (one byte - from this location)
+; -[custom diamond data - 24 bytes]
+; -[other data - not used for this version yet]
+; -name of level (variable length - zero terminated)
+; -length of name of level (one byte - includes the zero)
+; -high score (two bytes)
+; -number of levels (one byte)
+; *level data (variable length - multiples of 44)
+
+chgwrld:
+	ld	a,$01
+	ld	(startlev),a
+curwrld_lbl:
+	ld	hl,$0000
+	ld	ix,detectstr
+	call	ionDetect
+	jp	nz,prmenu
+	ld	a,(hl)
+	ld	(cdata),a
+	inc	hl
+	ld	c,(hl)
+	ld	b,$00
+	add	hl,bc
+	inc	hl
+	ld	(file),hl
+	ld	(curwrld),de
+	jp	menu
+
+;---------= Setup top of screen =---------
+settop:	bcall(_cleargbuf)
+	ld	de,gbuf
+	ld	hl,pic
+	ld	bc,14*12
+	ldir
+	set	7,(iy+20)
+	ld	hl,$0E01
+	ld	(pencol),hl
+	ld	hl,abt
+	bcall(_vputs)
+	ld	hl,$3801
+	ld	(pencol),hl
+	ld	hl,hscr
+	bcall(_vputs)
+file_lbl:
+	ld	hl,$0000
+	dec	hl
+	dec	hl
+	ld	c,(hl)
+	dec	hl
+	ld	h,(hl)
+	ld	l,c
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,6
+	bcall(_dispop1a)
+	ret
+
+;------------ Set up the game ------------
+strtgm:
+cdata_lbl:
+	ld	a,0
+	and	%00011100
+	rra
+	rra
+	inc	a
+	ld	e,a
+	sbc	hl,hl
+	ld	d,l
+	ld	b,100
+lctl:	add	hl,de
+	djnz	lctl
+	ld	(lifepts),hl
+	ld	a,(cdata)
+	and	%01100000
+	rra
+	rra
+	rra
+	rra
+	rra
+	inc	a
+	ld	e,a
+	xor	a
+	ld	b,30
+bll2:	add	a,e
+	djnz	bll2
+	ld	(bonstart),a
+	ld	hl,(file)
+	dec	hl
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	c,(hl)
+	ld	b,$00
+	sbc	hl,bc
+	dec	hl
+	ld	c,24
+	ld	de,custld
+	lddr			; load custom block
+	ld	a,(startlev)
+	ld	(lev),a
+	xor	a
+	ld	(key),a
+	ld	a,5
+	ld	(lvs),a
+	sbc	hl,hl
+	ld	(score),hl
+	ld	(lifect),hl
+slev:	or	a		; clear carry flag
+	ld	hl,(file)
+	ld	bc,$002C
+	sbc	hl,bc
+	ld	bc,(lev-1)
+	ld	de,$002C
+lslp:	add	hl,de
+	djnz	lslp
+	xor	a
+	ld	(cblk),a
+	ld	de,level	; decompress/load a level
+	ld	bc,$29*256+15
+	call	ionDecompress
+	dec	hl
+	ld	bc,$0004
+	ld	de,level+$0050
+	ldir
+	ld	hl,level+$0052
+	ld	a,(hl)
+	ld	(blks),a
+	inc	hl
+	ld	a,(hl)
+	ld	(lblks),a
+bonstart_lbl:
+	ld	a,0
+	ld	(tick),a
+	ld	a,$28
+	ld	(tickc),a
+start:	bcall(_cleargbuf)
+
+	ld	hl,gbuf+12
+	push	hl
+	ld	de,10
+	ld	b,61
+vlineL:	ld	(hl),%10000000
+	add	hl,de
+	ld	(hl),%01000000
+	inc	hl
+	inc	hl
+	djnz	vlineL
+	pop	hl
+	ld	de,gbuf+744
+	ld	b,10
+	ld	a,$FF
+hlineL:	ld	(hl),a
+	ld	(de),a
+	inc	de
+	inc	hl
+	djnz	hlineL
+	ld	a,%11000000
+	ld	(hl),a
+	ld	(de),a
+
+	call	drwlev
+	ld	a,$32
+dlp6:	ld	c,a
+	ld	b,$53
+	ld	d,$5F
+	ld	e,c
+	bcall(_darkline)
+	sub	$0E
+	cp	$08
+	jr	nz,dlp6
+	ld	c,$0E
+	ld	e,c
+	bcall(_darkline)
+	set     7,(iy+$14)
+	ld	hl,$1C53
+	ld	(pencol),hl
+	ld	hl,scr
+	bcall(_vputs)
+	ld	de,$0E53
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	hl,$0052
+	ld	(pencol),hl
+	ld	hl,tcks
+	bcall(_vputs)
+	call	displvs
+	ld	hl,$1453
+	ld	(pencol),hl
+lev_lbl:
+	ld	a,0
+	push	af
+	bcall(_setxxop1)
+	pop	af
+	call	center
+	ld	a,$03
+	bcall(_dispop1a)
+	ld	ix,lives
+	ld	b,5
+	ld	l,$2B
+	ld	a,$52
+	call	ionPutSprite
+	call	dispsc
+	call	sbtck
+	xor	a
+	ld	(ovrflag),a
+	ld	(winflag),a
+	ld	(arrowdr),a
+	ld	a,(cblk)
+	cp	$06
+	jr	z,sblks
+	ld	a,$01
+	ld	(cblk),a
+sblks:	call	update
+	ld	hl,level+$0050
+	call	ldhlind
+	ld	(xc),hl
+	call	mball
+	bcall(_copygbuf)
+	ld	a,1
+	ld	(dir),a
+
+pauseReturn:
+	ld	b,50
+	ei
+delay:	halt
+	djnz	delay
+
+
+;------------ MAIN GAME LOOP ------------
+main:	bcall(_copygbuf)
+tickc_lbl:
+	ld	a,$00
+	dec	a
+	jr	nz,notTime
+	call	sbtck
+	ld	a,40
+notTime:
+	ld	(tickc),a
+winflag_lbl:
+	ld	a,1
+	or	a
+	jr	nz,won
+ovrflag_lbl:
+	ld	a,0
+	cp	$07
+	jr	z,exit
+	call	mvball
+	ld	a,$FE
+	out	(1),a
+	in	a,(1)
+	cp	253
+	jp	z,mleft
+	cp	251
+	jp	z,mright
+	ld	a,$BF
+	out	(1),a
+	in	a,(1)
+	cp	191
+	jp	z,pause
+	cp	127
+	jr	z,gmovr
+	ld	a,$FD
+	out	(1),a
+	in	a,(1)
+	cp	191
+	jr	nz,main
+
+exit:	bcall(_cleargbuf)
+	ld	hl,lvs
+	dec	(hl)
+	jp	nz,start
+gmovr:	call	settop
+	bcall(_copygbuf)
+	ld	hl,losser
+	jp	theend
+
+won:	ld	hl,4*256+3
+	ld	(currow),hl
+	ld	hl,tcks
+	ld	a,(tick)
+	or	a
+	jr	nz,bonyes
+	ld	a,2
+	ld	(curcol),a
+	dec	hl
+	dec	hl
+	dec	hl
+bonyes:	set	3,(iy+5)
+	bcall(_puts)
+	res	3,(iy+5)
+	res     7,(iy+20)	; write to gbuf
+	ld	b,120
+bonus:	push	bc
+	ld	a,(tick)
+	or	a
+	jr	z,bnmore
+	ld	hl,(score)
+	inc	hl
+	ld	(score),hl
+	call	xlife
+	call	sbtck
+	call	dispsc
+	jr	bmore
+bnmore:	ei
+	halt
+	halt
+	halt
+bmore:	pop	bc
+	djnz	bonus
+wrap:	ld	a,(numoflevs)
+	inc	a
+	ld	hl,lev
+	inc	(hl)
+	cp	(hl)
+	jp	nz,slev
+	ld	a,(cdata)
+	and	%00000010
+	jr	z,stops
+	xor	a
+	ld	(lev),a
+	jr	wrap
+stops:	call	settop
+	bcall(_copygbuf)
+	ld	hl,winner
+theend:	ld	de,3*256+3
+	ld	(currow),de
+	bcall(_putps)
+	ld	hl,2*256+4
+	ld	(currow),hl
+	ld	hl,hscr+5
+	bcall(_puts)
+	ld	hl,(score)
+	bcall(_disphl)
+	ld	hl,(file)
+	dec	hl
+	dec	hl
+	push	hl
+	ld	e,(hl)
+	dec	hl
+	ld	d,(hl)
+	ld	hl,(score)
+	call	ZLhighScore
+	ex	de,hl
+	pop	hl
+#ifdef TI83P
+	di
+#endif
+	ld	(hl),e
+	dec	hl
+	ld	(hl),d
+	ld	hl,1*256+5
+	ld	(currow),hl
+	ld	hl,dnhs
+	jr	nz,noHighScore
+	bcall(_putps)
+noHighScore:
+	ld	b,25
+	ei
+endLoop:
+	halt
+	djnz	endLoop
+endLoop2:
+	bcall(_getk)
+	or	a
+	jr	z,endLoop2
+	jp	menu
+
+;------------ Pause ------------
+pause:	ld	a,1
+	out	(3),a
+	jp	pauseReturn
+
+;---------- Check for extra life ----------
+xlife:
+lifect_lbl:
+	ld	hl,$0000
+	inc	hl
+	ld	d,h
+	ld	e,l
+lifepts_lbl:
+	ld	bc,$0000
+	sbc	hl,bc
+	jr	nz,xlifex
+lvs_lbl:
+	ld	a,0
+	inc	a
+	ld	(lvs),a
+	call	displvs
+	ld	de,$0000
+xlifex:	ld	(lifect),de
+	ret
+
+;------------ Subtract number of ticks ------------
+tick_lbl:
+sbtck:	ld	a,0
+	or	a
+	jr	z,sbts
+	dec	a
+	ld	(tick),a
+sbts:	ld	a,$06
+	ld	(penrow),a
+	ld	a,(tick)
+	call	center
+	ld	hl,(tick)
+	ld	h,$00
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,3
+	bcall(_dispop1a)
+	ret
+
+;---------- Clear/center text ----------
+center:	ld	c,a
+	ld	a,$53
+	ld	(pencol),a
+	ld	hl,blank
+	push	bc
+	bcall(_vputs)
+	pop	bc
+	ld	hl,pencol
+	ld	a,$53
+	ld	(hl),a
+	ld	a,c
+	cp	100
+	ret	nc
+	inc	(hl)
+	inc	(hl)
+	cp	10
+	ret	nc
+	inc	(hl)
+	inc	(hl)
+	ret
+
+;------------ Move the ball left/right ------------
+mleft:	ld	a,(arrowdr)
+	or	a
+	jr	nz,mrght2
+mlft2:	ld	a,(xc)
+	dec	a
+	jr	z,mls
+	call	mball
+	ld	hl,xc
+	dec	(hl)
+	call	tstblk
+	or	a
+	jr	z,mlc
+	ld	hl,xc
+	inc	(hl)
+mlc:	call	mball
+mls:	jp	main
+
+;------------ Move the ball right/left ------------
+mright:
+arrowdr_lbl:
+	ld	a,0
+	or	a
+	jr	nz,mlft2
+mrght2:	ld	a,(xc)
+	cp	77
+	jr	z,mls
+	call	mball
+	ld	hl,xc
+	inc	(hl)
+	call	tstblk
+	or	a
+	jr	z,mlc
+	ld	hl,xc
+	dec	(hl)
+	jr	mlc
+	jr	mls
+
+;------------ Update on-screen status ------------
+cblk_lbl:
+update:	ld	b,0
+	ld	l,54
+	ld	a,84
+	jp	drawBlock
+
+;------------ Check which block the ball is at ------------
+;------------   and do whatever is necessary   ------------
+tstblk:	ld	a,$FF
+	ld	(pkey),a
+	ld	hl,$0000
+	ld	(tmp),hl
+	ld	a,(xc)
+	ld	e,$0A
+	call	div
+	ld	a,d
+	ld	(xc2),a
+	ld	(tmp),a
+	ld	a,(yc)
+	ld	e,$06
+	call	div
+	ld	a,d
+	ld	(yc2),a
+	or	a
+	jr	z,tbs1
+	ld	b,d
+	ld	de,8
+tblp1:	add	hl,de
+	djnz	tblp1
+tmp_lbl:
+tbs1:	ld	bc,$0000
+	add	hl,bc
+	ld	bc,level
+	add	hl,bc
+	ld	a,(hl)
+tbs2:	ld	(ovrflag),a
+	push	af
+	cp	$03
+	jp	z,chgx
+	cp	$05
+	jp	z,chgx
+	cp	$09
+	jp	z,chgx
+	cp	$0B
+	jp	z,chgB
+	cp	$0C
+	jp	z,chgC
+	cp	$0E
+	jp	z,chgx
+	cp	$0F
+	jr	nz,nochg
+	ld	de,arrowdr
+	ld	a,(de)
+	xor	%00000001
+	ld	(de),a
+	ld	a,(cblk)
+	ld	(pkey),a
+	ld	a,$0F
+	ld	(cblk),a
+	ld	a,(cdata)
+	and	%00000001
+	jr	nz,elim
+tbxs:	jp	tbx
+
+nochg:	ld	b,a
+	ld	a,(cblk)
+	cp	b
+	jr	nz,tbxs
+
+;------------ Eliminate a Block ------------
+elim:	ld	(hl),0
+xc2_lbl:
+	ld	a,0
+	inc	a
+	ld	b,a
+	ld	c,9
+ell1:	add	a,c
+	djnz	ell1
+	sub	c
+	push	af
+yc2_lbl:
+	ld	a,0
+	inc	a
+	ld	b,a
+	ld	c,5
+ell2:	add	a,c
+	djnz	ell2
+	sub	c
+	inc	a
+	ld	l,a
+	pop	af
+	ld	bc,(cblk-1)
+	call	drawBlock
+score_lbl:
+	ld	hl,$0000
+	inc	hl
+	ld	(score),hl
+	call	dispsc
+	call	xlife
+blks_lbl:
+	ld	a,0
+	or	a
+	jr	z,sb1
+	dec	a
+	call	z,chg6
+	ld	(blks),a
+	jr	tbx
+
+sb1:	ld	hl,lblks
+	dec	(hl)
+	jr	nz,tbx
+	ld	a,1
+	ld	(winflag),a
+pkey_lbl:
+tbx:	ld	a,0
+	cp	$FF
+	jr	z,tbxx
+	ld	(cblk),a
+tbxx:	pop	af
+	ret
+
+chgx:	ld	b,a
+	ld	a,(cblk)
+	cp	$06
+	jr	z,tbxx
+	push	bc
+	call	update
+	pop	bc
+	ld	a,b
+	dec	a
+	ld	(cblk),a
+	call	update
+	jr	tbxx
+
+chgC:	; hit the key so...
+key_lbl:
+	ld	a,0
+	or	a
+	jr	nz,tbxx
+	inc	a
+	ld	(key),a
+	ld	a,(cblk)
+	ld	(pkey),a
+	ld	a,$0C
+	ld	(cblk),a
+	jp	elim
+
+chgB:	; hit the lock so...
+	ld	a,(key)
+	or	a
+	jr	z,tbxx
+	xor	a
+	ld	(key),a
+	ld	a,(cblk)
+	ld	(pkey),a
+	ld	a,$0B
+	ld	(cblk),a
+	jp	elim
+
+chg6:	; set the block type to 6
+	push	af
+	ld	a,(pkey)
+	cp	$FF
+	jr	z,chg6b
+	ld	(cblk),a
+chg6b:	call	update
+	ld	a,$06
+	ld	(cblk),a
+	ld	a,$FF
+	ld	(pkey),a
+	call	update
+	pop	af
+	ret
+
+;------------ Divide A by E ------------
+div:	; divide a by e and return d=answer
+	ld		d,$00
+dv1:	sub		e
+	ret		c
+	inc		d
+	jr		dv1
+
+;------------ Turn on/off the ball ------------
+mball:	ld	b,4
+	ld	ix,ball
+	ld	hl,(yc)
+	ld	a,(xc)
+	jp	ionPutSprite
+
+;------------ Move the ball vertically ------------
+mvball:	call	mball
+mvBallS1:
+dir_lbl:
+	ld	c,1
+	ld	hl,yc
+	ld	a,(hl)
+	add	a,c
+	ld	(hl),a
+mvBallS2:
+	cp	2
+	jr	z,mvBallS3
+	cp	58
+	jr	z,mvBallS6
+mvBallS4:
+	call	tstblk
+	or	a
+	jr	z,mvBallS5
+	ld	hl,dir
+	ld	a,(hl)
+	neg
+	ld	(hl),a
+mvBallS5:
+	jp	mball
+mvBallS3:
+	ld	a,1
+mvBallS7:
+	ld	(dir),a
+	jr	mvBallS4
+mvBallS6:
+	ld	a,-1
+	jr	mvBallS7
+
+;---------- Display lives left ----------
+displvs:
+	ld	hl,$2A59
+	ld	(pencol),hl
+	ld	a,(lvs)
+	bcall(_setxxop1)
+	ld	a,$02
+	bcall(_dispop1a)
+	ret
+
+;------------ Display the Score ------------
+dispsc:	ld	hl,$2253
+	ld	(pencol),hl
+	ld	hl,(score)
+	push	hl
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	pop	hl
+	ld	a,h
+	or	a
+	ld	a,l
+	call	z,center
+	ld	a,$03
+	bcall(_dispop1a)
+	ret
+
+;------------ Draw the level (on/off) ------------
+drwlev:	ld	hl,2*256+1
+	ld	(xc),hl
+	ld	hl,level
+	ld	b,$0A
+dlp1:	push	bc
+	ld	b,$08
+dlp2:	push	bc
+	push	hl
+	ld	b,(hl)
+	ld	a,(xc)
+	ld	hl,(yc)
+	call	drawBlock
+dskp:	ld	hl,xc
+	ld	a,(hl)
+	add	a,$0A
+	ld	(hl),a
+	pop	hl
+	inc	hl
+	pop	bc
+	djnz	dlp2
+	ld	a,(yc)
+	add	a,6
+	ld	d,a
+	ld	e,1
+	ld	(xc),de
+	pop	bc
+	djnz	dlp1
+	ret
+
+;---------= Draw Block =---------
+; Input: l=y, a=x, b=type
+drawBlock:
+	inc	b
+	dec	b
+	ret	z
+	ld	ix,blocks-12
+	ld	de,12
+drawBlockL1:
+	add	ix,de
+	djnz	drawBlockL1
+	ld	b,6
+	push	af
+	push	hl
+	call	ionPutSprite
+	pop	hl
+	pop	af
+	add	a,8
+	ld	b,6
+	jp	ionPutSprite
+
+;------------ Sprites ------------
+ball:	.db	01100000b
+	.db	11110000b
+	.db	11110000b
+	.db	01100000b
+blocks:	; each block is 12 bytes
+block1:	.db	01111111b	; width=10
+	.db	10000000b	; height=6
+	.db	10000000b	; clear
+	.db	10000000b
+	.db	10000000b
+	.db	01111111b
+blk1b:	.db	10000000b
+	.db	01000000b
+	.db	01000000b
+	.db	01000000b
+	.db	01000000b
+	.db	10000000b
+block2:	.db	01111111b	; spotted
+	.db	11010101b
+	.db	10101010b
+	.db	11010101b
+	.db	10101010b
+	.db	01111111b
+	.db	10000000b
+	.db	01000000b
+	.db	11000000b
+	.db	01000000b
+	.db	11000000b
+	.db	10000000b
+block3:	.db	01111111b	; change to spotted
+	.db	11010111b
+	.db	10101111b
+	.db	11010111b
+	.db	10101111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+block4:	.db	01111111b	; bordered
+	.db	10000000b
+	.db	10111111b
+	.db	10111111b
+	.db	10000000b
+	.db	01111111b
+	.db	10000000b
+	.db	01000000b
+	.db	01000000b
+	.db	01000000b
+	.db	01000000b
+	.db	10000000b
+block5:	.db	01111111b	; change to bordered
+	.db	10000111b
+	.db	10110111b
+	.db	10110111b
+	.db	10000111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+block6:	.db	01111111b	; last (thick border)
+	.db	11111111b
+	.db	11100001b
+	.db	11100001b
+	.db	11111111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+block7:	.db	01111111b	; killer
+	.db	11100111b
+	.db	10000000b
+	.db	10000000b
+	.db	11100111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	01000000b
+	.db	01000000b
+	.db	11000000b
+	.db	10000000b
+block8:	.db	01111111b	; spotted 2
+	.db	10110011b
+	.db	10011001b
+	.db	11001100b
+	.db	11100110b
+	.db	01111111b
+	.db	10000000b
+	.db	01000000b
+	.db	11000000b
+	.db	11000000b
+	.db	01000000b
+	.db	10000000b
+block9:	.db	01111111b	; change to spotted 2
+	.db	10110111b
+	.db	10011111b
+	.db	11001111b
+	.db	11100111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+blockA:	.db	01111111b	; blocker
+	.db	10111101b
+	.db	11110111b
+	.db	11011111b
+	.db	11111011b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	01000000b
+	.db	11000000b
+	.db	10000000b
+blockB:	.db	01111111b	; lock
+	.db	11110011b
+	.db	11101101b
+	.db	11100001b
+	.db	11100001b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+blockC:	.db	01111111b	; key
+	.db	11110001b
+	.db	11110001b
+	.db	11111011b
+	.db	11110011b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+blockD:	.db	01111111b	; custom diamond
+	.db	11100110b
+	.db	11100110b
+	.db	10011001b
+	.db	10011001b
+	.db	01111111b
+	.db	10000000b
+	.db	01000000b
+	.db	01000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+blockE:	.db	01111111b	; custom change block
+	.db	11100111b
+	.db	11100111b
+	.db	10011111b
+	.db	10011111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+	.db	11000000b
+custld:	.db	10000000b
+blockF:	.db	01111111b	; change arrow key direction
+	.db	11111110b
+	.db	11011000b
+	.db	10000110b
+	.db	11011111b
+	.db	01111111b
+	.db	10000000b
+	.db	11000000b
+	.db	01000000b
+	.db	11000000b
+	.db	11000000b
+	.db	10000000b
+lives:	.db	00101000b	; heart (for lives)
+	.db	01111100b
+	.db	01111100b
+	.db	00111000b
+	.db	00010000b
+
+;------------ Dialog ------------
+detectstr:
+	.db	"Dia1JW",0
+opt1:	.db	"2nd - Start",$00
+opt2:	.db	"ALPHA - Level:",$00
+opt3:	.db	"DEL - Exit",$00
+opt4:	.db	"MODE - ",$00
+abt:	.db	"by Joe Wingbermuehle"
+	.db	"       v2.0",$00
+winner:	.db	$09,"You Won!!"
+losser:	.db	$09,"Game Over"
+dnhs:	.db	$0E,"New "
+hscr:	.db	"High Score:",$00
+scr:	.db	"Scr",0
+levl:	.db	"Lev"
+no:	.db	" No"
+tcks:	.db	" Bonus! ",$00
+pauset:	.db	$0B," - Pause -"
+blank	.db	"      ",0
+
+; Diamonds picture
+pic:	.db	31,135,225,252,62,248,127,12,12,126,31,240,60,202,179,6,89,156,234,150,26
+	.db	231,42,168,46,106,179,254,115,52,213,155,30,231,170,168,39,39,102,115,110,101
+	.db	190,221,150,153,171,240,53,163,71,143,74,173,99,86,218,149,172,0,61,226,196
+	.db	137,91,189,162,219,110,246,171,240,45,98,199,255,121,53,99,94,182,246,170,168
+	.db	37,35,68,1,104,37,162,214,90,149,170,168,53,163,71,255,72,45,99,90,46
+	.db	149,159,168,61,226,196,113,88,61,162,222,22,246,128,104,46,102,231,143,120,53
+	.db	221,214,26,254,159,168,38,109,84,137,104,36,170,154,30,153,170,168,51,77,87
+	.db	143,72,44,213,158,22,219,42,168,31,135,227,6,48,24,127,12,12,126,31,240
+
+
+ZLhighScore:
+;---------= High Score =---------
+; Input: de=previous high score
+;	hl=current score
+; Output: hl=high score
+;	z=1 (a=0) if new high score, z=0 (a=1) if not
+; Registers destroyed: af, de, hl
+hiscr:	push	hl
+	xor	a
+	sbc	hl,de
+	pop	hl
+	jr	z,nnhs
+	jr	nc,nhs
+nnhs:	ex	de,hl
+	inc	a
+	ret
+nhs:	or	a
+	ret
+
+ldhlind:
+	push	af
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	pop	af
+	ret
+
+.end
+END

@@ -1,0 +1,252 @@
+; Tunnel by Joe Wingbermuehle
+
+.nolist
+#include	"ion.inc"
+
+first		=sram
+width		=sram+1
+car		=sram+2
+ovrflg		=sram+3
+score		=sram+4
+count		=sram+6
+count2		=sram+7
+
+.list
+
+#ifdef TI83P
+	.org	progstart-2
+	.dw	$6DBB
+#else
+	.org	progstart
+#endif
+
+	ret
+	jr	nc,start_of_program
+abt1:	.db	"Tunnel v2.0",0
+start_of_program:
+	ld	a,30
+	ld	(first),a
+	ld	a,35
+	ld	(width),a
+	ld	a,40
+	ld	(car),a
+	ld	hl,0
+	ld	(ovrflg),hl
+	ld	(score+1),hl
+	ld	(count2),hl
+	ld	hl,770
+	ld	(currow),hl
+	ld	hl,abt1
+	bcall(_puts)
+	ld	hl,1283
+	ld	(currow),hl
+	ld	hl,abt2
+	bcall(_puts)
+	ld	de,516
+	ld	(currow),de
+	bcall(_puts)
+	ld	hl,7
+	ld	(currow),hl
+	ld	hl,abt4
+	bcall(_puts)
+	ld	hl,2567
+	ld	(currow),hl
+	ld	hl,(high_score)
+	bcall(_disphl)
+	call	wkey
+	call	drawCar
+	ld	bc,7680
+	ld	d,b
+	ld	e,63
+	bcall(_darkline)
+	inc	b
+	inc	d
+	bcall(_darkline)
+	ld	bc,16640
+	ld	d,b
+	bcall(_darkline)
+	inc	b
+	inc	d
+	bcall(_darkline)
+
+;-----> The main game loop
+main:	ld	a,(ovrflg)
+	or	a
+	jp	nz,gmovr
+	ld	hl,count
+	ld	a,(hl)
+	sub	10
+	jr	nz,skp1
+	ld	(hl),a
+	ld	hl,(score)
+	inc	hl
+	ld	(score),hl
+	ld	hl,count2
+	ld	a,(hl)
+	sub	16
+	ld	(hl),a
+	jr	nz,skp1
+	ld	hl,width
+	dec	(hl)
+skp1:	call	ionFastCopy
+	ei
+
+; Move down
+	call	drawCar
+	ld	hl,count
+	inc	(hl)
+	ld	de,gbuf+767
+	ld	hl,gbuf+767-12
+	ld	bc,768-12
+	lddr
+	ld	a,r
+	rra
+	and	3
+	jr	nz,move1
+	ld	a,(first)
+	dec	a
+	jr	z,mdc1
+	jr	mdone
+move1:	dec	a
+	jr	nz,mdc1
+	ld	a,(first)
+	cp	59
+	jr	z,mdc1
+	inc	a
+mdone:	ld	(first),a
+mdc1:	ld	b,12
+	ld	hl,gbuf
+	xor	a
+mdlp1:	ld	(hl),a
+	inc	hl
+	djnz	mdlp1
+	ld	a,(first)
+	push	af
+	call	setSide
+	pop	af
+	ld	hl,width
+	add	a,(hl)
+	call	setSide
+	call	drawCar
+; Check for collision
+	ld	a,(car)
+	ld	e,53
+	call	ionGetPixel
+	and	(hl)
+	jr	z,flagit
+	ld	e,53
+	ld	a,(car)
+	add	a,6
+	call	ionGetPixel
+	and	(hl)
+	jr	nz,cn2
+flagit:	ld	a,1
+	ld	(ovrflg),a
+cn2:
+; Get input
+	ld	a,0FFh
+        out	(1),a
+	ld	a,0FEh
+        out	(1),a
+	in	a,(1)
+	cp	253
+	jr	z,mleft
+	cp	251
+	jr	z,mright
+	ld	a,0BFh
+	out	(1),a
+	in	a,(1)
+	cp	191
+	jr	z,pause
+        cp	127
+	jp	nz,main
+gmovr:	bcall(_clrscr)
+	ld	hl,770
+	ld	(currow),hl
+	ld	hl,gover
+	bcall(_puts)
+	ld	hl,515
+	ld	(currow),hl
+	ld	hl,scr
+	bcall(_puts)
+	ld	hl,(score)
+	bcall(_disphl)
+	ld	hl,(score)
+	ex	de,hl
+	ld	hl,(high_score)
+	bcall(_cphlde)
+	call	c,newhs
+	jp	wkey
+
+newhs:	ex	de,hl
+	ld	(high_score),hl
+	ld	hl,261
+	ld	(currow),hl
+	ld	hl,nhs
+	bcall(_putps)
+	ret
+
+mright:	call	drawCar
+	ld	hl,car
+	inc	(hl)
+	jr	movex
+
+mleft:	call	drawCar
+	ld	hl,car
+	dec	(hl)
+movex:	call	drawCar
+	jp	main
+
+pause:	ld	a,1
+	out	(3),a
+	ei
+	halt
+	jp	main
+
+wkey:	call	wrel
+wkey2:	bcall(_getk)
+	or	a
+	jr	z,wkey2
+wrel:	bcall(_getk)
+	or	a
+	jr	nz,wrel
+	ret
+
+drawCar:
+	ld	ix,cars
+	ld	l,50
+	ld	a,(car)
+	ld	b,4
+	jp	ionPutSprite
+
+setSide:
+	ld	e,0
+	call	ionGetPixel
+	ld	c,0
+	or	(hl)
+	ld	(hl),a
+	rra
+	rr	c
+	or	(hl)
+	ld	(hl),a
+	inc	hl
+	ld	a,(hl)
+	or	c
+	ld	(hl),a
+	ret
+
+cars:	.db	%00010000
+	.db	%00111000
+	.db	%01101100
+	.db	%11000110
+
+gover:	.db	"Game Over",0
+abt2:	.db	"by Joe",0
+abt3:	.db	"Wingbermuehle",0
+nhs:	.db	13,"New "
+abt4:	.db	"High"
+scr:	.db	"Score:",0
+high_score:	.dw	0
+
+.end
+END

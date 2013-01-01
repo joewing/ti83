@@ -1,0 +1,529 @@
+;+------------------------------------------------------+
+;|			Land Mine v2.0			|
+;|		     by Joe Wingbermuehle		|
+;|	           	  19990824			|
+;+------------------------------------------------------+
+
+	.nolist
+	#include	"ion.inc"
+	.list
+
+;---------- Varibles - in apd ram ----------
+storage	=sram
+; the fields are 8x12 but are stored 10x13 to make computations easier
+#define	ufield		storage		; holds the status of each block
+#define field		storage+130-13	; holds mines
+#define spaces_left	storage+261	; holds the number of spaces left to be cleared
+#define tv		storage+269 	; holds the count for time
+#define	scr		storage+271
+
+#define	level		level_lbl+1
+#define	xc		xc_lbl+1
+#define	yc		xc_lbl+2
+#define	tmp		tmp_lbl+1
+#define	time		time_lbl+1
+#define	high_score	high_score_lbl+1
+#define	data		data_lbl+1
+#define	score	abt3+4
+
+#ifdef TI83P
+	.org	progstart-2
+	.dw	$6DBB
+#else
+	.org	progstart
+#endif
+
+;-----> The Ion Header
+	ret
+	jr	nc,programStart
+title:	.db	"LandMine v2.0",0
+	.db	"by Joe",0
+	.db	"Wingbermuehle",0
+programStart:
+
+;---------= set up the game - high score etc =---------
+	ld	hl,0
+	ld	(scr),hl
+	ld	hl,514
+	ld	(currow),hl
+	ld	hl,title
+	bcall(_puts)
+	ld	de,1283
+	ld	(currow),de
+	bcall(_puts)
+	ld	de,516
+	ld	(currow),de
+	bcall(_puts)
+	ld	hl,7
+	ld	(currow),hl
+	ld	hl,abt3
+	bcall(_puts)
+	ld	hl,2567
+	ld	(currow),hl
+high_score_lbl:
+	ld	hl,$0000
+	bcall(_disphl)
+	ld	a,92
+	ld	(level),a
+	call	wkey
+
+;---------- Setup the Level -----------
+start:	bcall(_clrscr)
+	set     7,(iy+20)
+	ld	a,181
+	ld	(time),a
+	ld	hl,ufield
+	ld	de,ufield+1
+	ld	bc,260
+	ld	(hl),0
+	ldir
+
+;---------= Display the Number of Mines =---------
+	ld	hl,770
+	ld	(currow),hl
+	ld	hl,msg1
+	bcall(_putps)
+level_lbl:
+	ld	a,$00
+	ld	(spaces_left),a
+	sub	96
+	neg
+	ld	(tmp),a
+	push	af
+	ld	h,0
+	ld	l,a
+	bcall(_disphl)
+	call	dispScore
+	pop	bc
+
+;---------= Randomly Place Mines =---------
+placeMinesL1:
+	push	bc
+placeMinesL2:
+	ld	b,11
+	call	ionRandom
+	ld	(xc),a
+	ld	b,8
+	call	ionRandom
+	inc	a
+	ld	(yc),a
+	call	align
+	ld	de,field-ufield+1
+	add	hl,de
+	ld	a,(hl)
+	and	a
+	jr	nz,placeMinesL2
+	ld	(hl),1
+	pop	bc
+	djnz	placeMinesL1
+	call	wkey
+
+;---------= Draw the Screen =---------
+	sbc	hl,hl
+	ld	(xc),hl
+	ld	b,12
+drawScreenL1:
+	ld	de,top
+	call	putSprite
+	ld	hl,xc
+	inc	(hl)
+	djnz	drawScreenL1
+	ld	hl,$0100
+	ld	(xc),hl
+	ld	(tv),hl		; only needs 1st byte but so what
+	ld	b,96
+drawScreenL2:
+	ld	de,block
+	call	putSprite
+	ld	a,(xc)
+	inc	a
+	cp	12
+	jr	nz,drawScreenS1
+	ld	hl,yc
+	inc	(hl)
+	xor	a
+drawScreenS1:
+	ld	(xc),a
+	djnz	drawScreenL2
+	inc	a
+	ld	(yc),a
+	ld	(tv),a
+	call	dispCursor
+
+;---------= Game Loop =---------
+main:	bcall(_copygbuf)
+	ld	hl,tv
+	dec	(hl)
+	jp	z,subTime
+	bcall(_getk)
+	dec	a
+	jp	z,mDown
+	dec	a
+	jp	z,mLeft
+	dec	a
+	jp	z,mRight
+	dec	a
+	jp	z,mUp
+	cp	48-4
+	jp	z,flagMine
+	sub	54-4
+	jp	z,uncoverSpace
+	dec	a
+	jr	nz,skipPause
+
+;---------= Pause =---------
+	ld	a,1
+	out	(3),a
+	ei
+	halt
+	xor	a
+skipPause:
+	dec	a
+	jr	nz,main
+
+;---------= Game Over =----------
+gameOver:
+	ld	hl,$0100
+	ld	(xc),hl
+	ld	b,96
+gameOverLoop:
+	push	bc
+	call	align
+	ld	de,field-ufield
+	add	hl,de
+	ld	a,(hl)
+	or	a
+	ld	de,mine
+	call	nz,putSprite
+	ld	a,(xc)
+	ld	a,(xc)
+	inc	a
+	cp	12
+	jr	nz,gameOverSkip
+	ld	hl,yc
+	inc	(hl)
+	xor	a
+gameOverSkip:
+	ld	(xc),a
+	pop	bc
+	djnz	gameOverLoop
+	bcall(_copygbuf)
+	call	wkey
+	bcall(_clrscr)
+	ld	hl,lost
+	ld	de,1026
+	ld	(currow),de
+	bcall(_putps)
+	call	dispScore
+
+;---------- Check High Score ----------
+	ld	hl,(high_score)
+	ld	de,(scr)
+	bcall(_cphlde)
+	jr	nc,exit
+	ld	(high_score),de
+	ld	hl,261
+	ld	(currow),hl
+	ld	hl,nhs
+	bcall(_putps)
+exit:	jp	wkey	; exit LandMine
+
+winner:	ld	hl,(scr)
+	ld	de,(time)
+	ld	d,0
+	add	hl,de
+	ld	(scr),hl
+	ld	hl,level
+	dec	(hl)
+	dec	(hl)
+	dec	(hl)
+	dec	(hl)
+	jp	start
+
+;---------= Subtract from Time Left =---------
+subTime:
+	ld	hl,time
+	dec	(hl)
+	jp	z,gameOver
+	ld	hl,40
+	ld	(pencol),hl
+	ld	hl,blank
+	bcall(_vputs)
+	ld	hl,43
+	ld	(pencol),hl
+time_lbl:
+	ld	l,$00
+	ld	h,0
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,3
+	bcall(_dispop1a)
+	ld	a,64
+	ld	(tv),a
+	jp	main
+
+;---------= Display the Score =---------
+dispScore:
+	ld	hl,771
+	ld	(currow),hl
+	ld	hl,score
+	bcall(_puts)
+	ld	hl,(scr)
+	bcall(_disphl)
+	ret
+
+;---------= (Un)Flag a Mine =---------
+flagMine:
+	call	align
+	ld	a,(hl)
+	dec	a
+	jr	z,flagMine_uncovered
+	dec	a
+	jr	z,flagMine_unflag
+	ld	(hl),2
+	ld	de,flag
+	jr	flagMine_finish
+flagMine_unflag:
+	ld	(hl),0
+	ld	de,block
+flagMine_finish:
+	call	putSprite
+	call	dispCursor
+flagMine_uncovered:
+	jp	main
+
+;---------= Move Right =---------
+mRight:
+	ld	a,(xc)
+	cp	11
+	jr	z,finishMove
+	call	setBlock
+	ld	hl,xc
+incMove:
+	inc	(hl)
+	jr	finishMove
+
+;---------= Move Left =---------
+mLeft:
+	ld	a,(xc)
+	or	a
+	jr	z,finishMove
+	call	setBlock
+	ld	hl,xc
+decMove:
+	dec	(hl)
+finishMove:
+	call	dispCursor
+	jp	main
+
+;---------= Move Up =----------
+mUp:	ld	a,(yc)
+	dec	a
+	jr	z,finishMove
+	call	setBlock
+	ld	hl,yc
+	jr	decMove
+
+;---------= Move Down =---------
+mDown:
+	ld	a,(yc)
+	cp	8
+	jr	z,finishMove
+	call	setBlock
+	ld	hl,yc
+	jr	incMove
+
+;---------- Uncover a Space ----------
+uncoverSpace:
+	call	align
+	ld	a,(hl)
+	or	a
+	jr	nz,uncoverSpace_flagged
+	ld	(hl),1
+	call	setBlock
+	call	dispCursor
+tmp_lbl:
+	ld	a,$00
+	or	a
+	jp	nz,gameOver
+	ld	hl,(scr)
+	inc	hl
+	ld	(scr),hl
+	ld	hl,spaces_left
+	dec	(hl)
+	ld	a,(hl)
+	or	a
+	jp	z,winner
+uncoverSpace_flagged:
+	jp	main
+	
+;--------- Set/Reset block ----------
+setBlock:
+	call	align
+	ld	a,(hl)
+	or	a
+	jr	z,setBlock_uncovered
+	dec	a
+	ld	de,flag
+	jr	nz,setBlock_flagged
+	ld	bc,field-ufield
+	add	hl,bc
+	ld	a,(hl)
+	ld	(tmp),a
+	ld	b,3
+	ld	de,-14
+	add	hl,de
+	ld	de,11
+setBlockLoop:
+	add	a,(hl)
+	inc	hl
+	add	a,(hl)
+	inc	hl
+	add	a,(hl)
+	add	hl,de
+	djnz	setBlockLoop
+	ld	de,nada
+	push	af
+	call	putSprite
+	pop	af
+	or	a
+	ret	z
+	bcall(_setxxop1)
+xc_lbl:
+	ld	hl,$0000
+	ld	a,h
+	add	a,a
+	add	a,h
+	add	a,a
+	add	a,h
+	ld	h,a
+	ld	a,l
+	add	a,a
+	add	a,a
+	add	a,a
+	add	a,2
+	ld	l,a
+	ld	(pencol),hl
+	bcall(_dispop1a)
+	ret
+setBlock_uncovered:
+	ld	de,block
+setBlock_flagged:
+	jr	putSprite
+
+;----------= Point de to xc,yc =---------
+; This allows a list to be read as a matrix
+align:	ld	bc,(xc)
+	ld	h,0
+	ld	l,c
+	inc	l
+	inc	b
+	ld	de,13	; width of matrix
+alignLoop:
+	add	hl,de
+	djnz	alignLoop
+	ld	bc,ufield
+	add	hl,bc
+	ret
+
+;---------- Wait for a key press ----------
+;GetKey can not be used because it would really mess up the
+;calc if it powered down!
+wkey:	ei
+	halt
+	bcall(_getk)
+	or	a
+	jr	z,wkey
+	ret
+
+;---------- Write a Sprite (8x7) -----------
+putSprite:
+	push	bc
+	call	setupCursor
+	ld	b,7
+putSpriteLoop:
+	ld	a,(de)
+	ld	(hl),a
+	inc	de
+	push	bc
+	ld	bc,12
+	add	hl,bc
+	pop	bc
+	djnz	putSpriteLoop
+	pop	bc
+	ret
+
+;---------= Display Cursor =---------
+dispCursor:
+	call	setupCursor
+	ld	de,12
+	ld	bc,5*256+%11111111
+	ld	(hl),c
+dispCursorLoop:
+	add	hl,de
+	ld	a,(hl)
+	or	%10000001
+	ld	(hl),a
+	djnz	dispCursorLoop
+	add	hl,de
+	ld	(hl),c
+	ret
+
+;---------= Get the gbuf Coordinates =---------
+setupCursor:
+	push	de
+	ld	bc,(xc)
+	ld	h,0
+	ld	l,c
+	inc	b
+	ld	de,84
+setupCursorLoop:
+	add	hl,de
+	djnz	setupCursorLoop
+	ld	de,gbuf-84
+	add	hl,de
+	pop	de
+	ret
+
+;---------= Dialog =----------
+blank:	.db	"               ",0
+lost:	.db	9,"Game Over"
+msg1:	.db	6,"Mines:"
+nhs:	.db	13,"New "
+abt3:	.db	"HighScore:"
+
+;---------= Sprite Data =---------
+top:	.db		00000000b	; top border
+	.db		01000001b
+	.db		10100010b
+	.db		00010100b
+	.db		00001000b
+	.db		00000000b
+	.db		11111111b
+block:	.db		00000000b	; block
+	.db		00000000b
+	.db		00010000b
+	.db		00000100b
+	.db		00100000b
+	.db		00000000b
+;	.db		00000000b
+nada:	.db		0,0,0,0,0,0	; 0 - blank
+mine:	.db		00000000b	; mine
+	.db		01011010b
+	.db		00111100b
+	.db		01111110b
+	.db		00111100b
+	.db		01011010b
+;	.db		00000000b
+flag:	.db		00000000b	; flag
+	.db		00000000b
+	.db		00111100b
+	.db		00111100b
+	.db		00100000b
+	.db		00100000b
+	.db		00000000b
+
+
+
+.end
+END

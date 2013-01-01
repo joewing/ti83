@@ -1,0 +1,171 @@
+; zmPW v2.1 by Joe Wingbermuehle 20000105
+
+	#include	"ion.inc"
+
+#ifdef TI83P
+        .org    sram-2
+        .db     $BB,$6D
+#else
+        .org    sram
+#endif
+        ret
+        .db     $02
+
+	cp	55	; exit
+	jr	nz,notExit
+	ld	a,(onExit)
+	or	a
+	jr	nz,Authorize
+	jr	exit
+notExit:
+	cp	255	; startup
+	jr	nz,notStartup
+	ld	a,(onStartup)
+	or	a
+	jr	nz,Authorize
+	jr	exit
+notStartup:
+	cp	40	; [X,T,0,n] protect
+	ret	nz
+	jr	PowerDown
+
+; Time out, so power down
+TimeOut:
+	pop	hl	; don't return to calling function
+; Power down and protect
+PowerDown:
+	ld	a,1
+	out	(3),a
+	ei
+	halt
+Authorize:
+	bcall(_clrscr)
+	bcall(_homeup)
+	ld	hl,header
+	bcall(_puts)
+	bcall(_newline)
+	ld	hl,prompt
+	bcall(_puts)
+	call	InputPassword
+	call	CheckPassword
+	jr	nz,PowerDown
+exit:	inc	a
+	ret
+
+; Check if the password in op1 matches the password
+; Return: zf=1 if correct
+CheckPassword:
+	ld	hl,password
+	ld	de,op1
+	ld	b,8
+checkPasswordLoop:
+	ld	a,(de)
+	cp	(hl)
+	ret	nz
+	inc	hl
+	inc	de
+	djnz	checkPasswordLoop
+	ret
+
+; Input a password to op1
+InputPassword:
+	bcall(_zeroop1)
+	ld	hl,op1
+	ld	e,9
+inputPasswordLoop1:
+	ld	d,$00
+inputPasswordLoop2:
+	push	hl
+	push	de
+	ei
+	halt
+	bcall(_getk)
+	pop	de
+	pop	hl
+	dec	d
+	jr	z,TimeOut	
+	or	a
+	jr	z,inputPasswordLoop2
+	cp	55	; mode
+	jr	z,ChangeConfig
+	cp	9	; enter
+	ret	z
+	dec	e
+	ret	z
+	ld	(hl),a
+	inc	hl
+	jr	inputPasswordLoop1
+
+; Change configuration
+ChangeConfig:
+	pop	hl
+	call	CheckPassword
+	jr	nz,TimeOut
+	bcall(_newline)
+	ld	hl,newprompt
+	bcall(_puts)
+	ld	hl,password+8
+	ld	b,8
+	ld	e,b
+changeInit:
+	dec	hl
+	ld	(hl),0
+	djnz	changeInit
+changeLoop:
+	push	hl
+	push	de
+	bcall(_getk)
+	pop	de
+	pop	hl
+	or	a
+	jr	z,changeLoop
+	cp	9	; [ENTER]
+	jr	z,changeDone
+	cp	55	; [MODE]
+	jr	z,changeDone
+	ld	(hl),a
+	inc	hl
+	dec	e
+	jr	nz,changeLoop
+changeDone:
+	bcall(_newline)
+	ld	hl,option1
+	bcall(_puts)
+	push	hl
+	call	GetValue
+	ld	(onStartup),a
+	bcall(_newline)
+	pop	hl
+	bcall(_puts)
+	call	GetValue
+	ld	(onExit),a
+	inc	a
+	ret
+
+; Get a boolean value
+; return answer as a=0 if true
+GetValue:
+	bcall(_getk)
+	cp	34	; 1 returns 34
+	ret	z
+	sub	33	; 0 returns 0
+	jr	nz,GetValue
+	ret
+
+;---------= Data =---------
+password:
+	.db	0,0,0,0,0,0,0,0
+onStartup:
+	.db	1	; protect on startup?
+onExit:	.db	1	; protect on exit?
+header:	.db	"zmPW 2.1 - Joe W",0
+newprompt:
+	.db	"New "
+prompt:	.db	"Password?",0
+option1:
+	.db	"On start <0/1>?",0
+option2:
+	.db	"On exit <0/1>?",0
+
+.end
+; End of zmPW by Joe Wingbermuehle

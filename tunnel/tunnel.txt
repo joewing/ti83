@@ -1,0 +1,33 @@
+Tunnel v2.0 by Joe Wingbermuehle 19990824
+
+>Requirements
+Requires a TI-83 or a TI-83 Plus with Ion.
+
+>Description
+This is a simple race-like game.  The object of
+this game is simple; stay inside the tunnel.
+Use the arrow keys to move, [MODE] to pause, and [DEL] to quit.
+
+>History:
+Version 1.0 <> 19970805
+	-First release.
+Version 1.1 <> 19980530
+	-Optimized it for SOS.
+	-Made it a lot smaller/faster.
+Version 1.2 <> 19980629
+	-Now uses ZGFXL.
+	-It is faster/smaller.
+Version 1.3 <> 19980701
+	Size: 539 bytes
+	-Fixed the bug that made it really easy.
+	-Even smaller yet!
+Version 2.0 <> 19990824
+	TI-83 Size:	520 bytes
+	TI-83Plus Size:	525 bytes
+	-Optimized for Ion! Now runs on both the TI-83 and
+	 the TI-83 Plus!
+	-Made the tunnel easier to see.
+	-Fixed the bug that let you get really high scores.
+
+Joe Wingbermuehle
+http://joewing.net

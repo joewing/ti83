@@ -1,0 +1,1810 @@
+;+------------------------------------------------------+
+;|			 Breakout v2.0			|
+;|		     by Joe Wingbermuehle		|
+;|	           	  19990824			|
+;+------------------------------------------------------+
+
+	.nolist
+	#include	"ion.inc"
+
+sam	.equ	sram
+; The following variable are stored in apd ram.
+blkct		=sam
+level		=sam+1		; 64 bytes
+fallct		=sam+65
+levct		=sam+66
+ballct		=sam+67
+sblocks		=sam+68		; 12*15=180 bytes
+bullet		=sam+248	; 2*2=4 bytes (x,y)
+fall		=sam+252	; 3*20=60 bytes (t,x,y)
+
+; The following variables are stored in an instruction that uses them.
+#define	score		score_lbl+1
+#define	file		file_lbl+1
+#define	speed		speed_lbl+1
+#define	bonusProb	bonusProb_lbl+1
+#define	ballx		ballxy_lbl+1
+#define	bally		ballxy_lbl+2
+#define	count		count_lbl+1
+#define	modulus		modulus_lbl+1
+#define	ballxv		ballxv_lbl+1
+#define	ballyv		ballyv_lbl+1
+#define	xc		xcyc_lbl+1
+#define	yc		xcyc_lbl+2
+#define	lev		lev_lbl+1
+#define	ovr		ovr_lbl+1
+#define	win		win_lbl+1
+#define	lvs		lvs_lbl+1
+#define	pad		pad_lbl+1
+#define	padlen		pad_lbl+2
+#define	temp		temp_lbl+1
+#define	temp2		temp2_lbl+1
+#define	motion		motion_lbl+1
+#define	stick		stick_lbl+1
+#define	curwrld		curwrld_lbl+1
+#define	startlev	startlev_lbl+1
+#define	bule		bule_lbl+1
+#define	btmln		btmln_lbl+1
+#define	opposite	opposite_lbl+1
+#define	doublePts	doublePts_lbl+1
+#define	bulletHit	bulletHit_lbl+1
+#define	heavyBall	heavyBall_lbl+1
+#define	crazyBall	crazyBall_lbl+1
+
+#define	data	data_lbl+1
+#define number_of_bonuses	16
+
+	.list
+#ifdef TI83P
+	.org	progstart-2
+	.db	$BB,$6D
+#else
+	.org	progstart
+#endif
+
+;-----------= Beginning of ASM code =-----------
+	ret
+	jr	nc,start
+	.db	"Breakout v2.0",0
+start:
+
+;---------= Start of Program =---------
+world_restart:
+	xor	a
+	ld	(startlev),a
+	ld	hl,(vat)
+	ld	ix,search_string
+	call	ionDetect
+	ret	nz
+	ld	c,(hl)
+	ld	b,$00
+	add	hl,bc
+	inc	hl
+	ld	(file),hl
+	ld	(curwrld),de
+	ld	hl,blkdef	; load blocks
+	ld	de,sblocks
+	ld	bc,7*12
+	ldir
+	ld	hl,blkdef
+	ld	bc,8*12
+	ldir
+	ld	hl,sblocks+(7*12)+3
+	ld	de,$000B
+	ld	bc,$07FF
+blkll:	ld	(hl),c
+	inc	hl
+	ld	(hl),c
+	add	hl,de
+	djnz	blkll
+prmenu:	
+menu:	call	settop
+	ld	hl,$1604
+	ld	(pencol),hl
+	ld	hl,opt1
+	bcall(_vputs)
+	ld	de,$1D04
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,$2404
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,$2B04
+	ld	(pencol),de
+	bcall(_vputs)
+file_lbl:
+	ld	hl,0
+	dec	hl
+	ld	a,(hl)
+	ld	(levct),a
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	c,(hl)
+	ld	b,$00
+	sbc	hl,bc
+	bcall(_vputs)
+menulp:	call	wkey
+	cp	48
+	jr	z,sslev
+	sub	54
+	jp	z,setup
+	dec	a
+	jp	z,chgwrld
+	dec	a
+	jr	nz,menulp
+	bcall(_clrscr)
+	ret
+
+;---------= Set Options =---------
+sslev:	call	settop
+	ld	a,(startlev)
+	ld	(temp),a
+	ld	hl,temp2
+speed_lbl:
+	ld	a,1
+	ld	(hl),a
+	inc	hl
+	ld	a,(bonusProb)
+	ld	(hl),a
+sllp:	ld	hl,$1604
+	ld	(pencol),hl
+	ld	hl,bopt1
+	bcall(_vputs)
+	push	hl
+	ld	a,(temp)
+	inc	a
+	bcall(_setxxop1)
+	ld	a,2
+	bcall(_dispop1a)
+	call	vputblank
+	ld	hl,$1D04
+	ld	(pencol),hl
+	pop	hl
+	bcall(_vputs)
+	push	hl
+	ld	a,(temp2)
+	bcall(_setxxop1)
+	ld	a,1
+	bcall(_dispop1a)
+	ld	hl,$2404
+	ld	(pencol),hl
+	pop	hl
+	bcall(_vputs)
+	push	hl
+	ld	a,(temp2+1)
+	neg
+	and	%00000111
+	bcall(_setxxop1)
+	ld	a,1
+	bcall(_dispop1a)
+	ld	hl,$2B04
+	ld	(pencol),hl
+	pop	hl
+	bcall(_vputs)
+	call	wkey
+	ld	hl,$14
+	cp	54
+	jr	z,ssl
+	cp	55
+	jr	z,changeBonus
+	cp	4
+	jr	z,adslv
+	cp	48
+	jr	z,changeSpeed
+	dec	a
+	jr	z,sbslv
+	cp	56-1
+	jr	nz,sllp
+	jp	menu
+
+sbslv:	ld	a,(temp)
+	dec	a
+	cp	$FF
+	jr	nz,adslvc
+	ld	a,(levct)
+	dec	a
+	jr	adslvc
+adslv:	ld	bc,(levct-1)
+	ld	a,(temp)
+	inc	a
+	cp	b
+	jr	nz,adslvc
+	xor	a
+adslvc:	ld	(temp),a
+	jp	sllp
+
+ssl:	ld	a,(temp)
+	ld	(startlev),a
+	ld	hl,temp2
+	ld	a,(hl)
+	ld	(speed),a
+	inc	hl
+	ld	a,(hl)
+	ld	(bonusProb),a
+	jp	menu
+
+changeBonus:
+	ld	hl,temp2+1
+	ld	a,(hl)
+	dec	a
+	and	7
+	ld	(hl),a
+	jp	sllp
+
+changeSpeed:
+	ld	hl,temp2
+	ld	a,(hl)
+	inc	a
+	and	3
+	ld	(hl),a
+	jp	sllp
+
+;---------= Setup basic menu screen =---------
+settop:	bcall(_clrscr)
+	ld	hl,$0100
+	ld	(currow),hl
+	ld	hl,name-1
+	bcall(_putps)
+	ld	bc,55
+	ld	de,24119
+	bcall(_darkline)
+	res     7,(iy+20)
+	ld	hl,2305
+	ld	(pencol),hl
+	ld	hl,abt
+	bcall(_vputs)
+	ld	hl,14337
+	ld	(pencol),hl
+	ld	hl,hscr
+	bcall(_vputs)
+	ld	hl,(file)
+	dec	hl
+	dec	hl
+	ld	c,(hl)
+	dec	hl
+	ld	h,(hl)
+	ld	l,c
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,$05
+	bcall(_dispop1a)
+	ret
+
+;---------= Change World =---------
+; the level data is set up as follows in the level sets:
+; -"Breakout v1.0 by Joe W" (22 bytes)
+; -number of byte to start of level
+; -level name
+; -$00
+; -number of bytes in the level name (including the zero)
+; -high score (2 bytes)
+; -number of levels
+; -start of levels (33 bytes each)
+
+chgwrld:
+	xor	a
+	ld	(startlev),a
+curwrld_lbl:
+	ld	hl,$0000
+	ld	ix,search_string
+	call	ionDetect
+	jp	nz,world_restart
+	ld	c,(hl)
+	ld	b,$00
+	add	hl,bc
+	inc	hl
+	ld	(file),hl
+	jp	menu
+
+;---------= Set up level =---------
+setup:	ld	a,$05
+	ld	(lvs),a
+	ld	hl,$0000
+	ld	(score),hl
+startlev_lbl:
+	ld	a,0
+	ld	(lev),a
+begin:	ld	hl,(file)	; load level
+	ld	de,33
+	or	a
+	sbc	hl,de
+	ld	bc,(lev-1)
+	inc	b
+setl1:	add	hl,de
+	djnz	setl1
+	ld	de,level
+	ld	bc,32*256+15
+	call	ionDecompress
+	ld	a,(hl)
+	ld	(blkct),a
+rstart:	bcall(_cleargbuf)
+	ld	b,3*20
+	ld	hl,fall
+rstrtl:	ld	(hl),0
+	inc	hl
+	djnz	rstrtl
+	ld	de,level
+	sbc	hl,hl
+	ld	(bullet),hl
+	ld	(bullet+2),hl
+	ld	(xc),hl
+setl3:	ld	a,(de)
+	push	de
+	call	drawBBlock
+	pop	de
+	ld	hl,yc
+	ld	a,(xc)
+	add	a,12
+	cp	96
+	jr	nz,setsk5
+	ld	a,(hl)
+	add	a,6
+	ld	(hl),a
+	xor	a
+setsk5:	ld	(xc),a
+	inc	de
+	ld	a,(hl)
+	cp	48
+	jr	nz,setl3
+	ld	hl,49*256+45
+	ld	(ballx),hl
+	ld	a,-1
+	ld	(ballxv),a
+	ld	(ballyv),a
+	xor	a
+	ld	(opposite),a
+	ld	(doublePts),a
+	ld	(heavyBall),a
+	ld	(crazyBall),a
+
+	ld	(ovr),a
+	ld	(win),a
+	ld	(stick),a
+	ld	(bule),a
+	ld	(btmln),a
+	ld	(motion),a
+	ld	de,$5F07
+	ld	b,a
+	ld	c,e
+	bcall(_darkline)
+	set	7,(iy+$14)
+	ld	hl,57*256+56
+	ld	(pencol),hl
+	ld	hl,scr
+	bcall(_vputs)
+	ld	de,57*256+31
+	ld	(pencol),de
+	bcall(_vputs)
+	ld	de,57*256+0
+	ld	(pencol),de
+	bcall(_vputs)
+lev_lbl:
+	ld	a,0
+	inc	a
+	bcall(_setxxop1)
+	ld	a,$02
+	bcall(_dispop1a)
+	ld	hl,$0C2B
+	ld	(pad),hl
+	call	drawpad
+	call	drawball
+	call	dispscr
+	call	displvs
+	ld	a,(speed)
+	ld	(count),a
+	ld	(fallct),a
+	ld	(ballct),a
+
+;---------= Main game loop =---------
+game:	call	drawball
+	ld	hl,ballct
+	dec	(hl)
+	call	z,moveball
+	ld	hl,fallct
+	dec	(hl)
+	ld	a,(hl)
+	or	a
+	call	z,drop
+	call	drawball
+count_lbl:
+	ld	a,0
+	dec	a
+	jr	nz,nocopy
+	call	bullup
+	bcall(_copygbuf)
+	ld	a,$02
+nocopy:	ld	(count),a
+ovr_lbl:
+	ld	a,0
+	cp	$02
+	jp	z,begin
+	or	a
+	jp	nz,losser
+win_lbl:
+	ld	a,0
+	or	a
+	jp	nz,winner
+	ld	a,$FF
+	out	(1),a
+	ld	a,$FE
+	out	(1),a
+	in	a,(1)
+	cp	251
+	jp	z,mright
+	cp	253
+	jp	z,mleft
+	ld	a,$DF
+	out	(1),a
+	in	a,(1)
+	cp	127
+	jp	z,alpha
+	ld	a,$FD
+	out	(1),a
+	in	a,(1)
+	cp	191
+	jp	z,losser
+	ld	a,$BF
+	out	(1),a
+	in	a,(1)
+	cp	223
+	jp	z,stuck
+	cp	191
+	jp	z,pause
+	cp	127
+	jp	nz,game
+	jp	exit
+
+;---------= Alpha pressed =---------
+alpha:	ld	a,(motion)
+	or	a
+	jr	nz,alphaS2
+	call	drawball
+	ld	de,(pad)
+	push	de
+	ld	e,4
+	call	div
+	ld	c,d
+	pop	de
+	ld	a,e
+	add	a,c
+	dec	a
+	ld	e,a
+	ld	a,(ballx)
+	cp	e
+	jr	nz,alphaS1
+	ld	a,e
+	inc	a
+	add	a,c
+	ld	e,a
+alphaS1:
+	ld	a,e
+	ld	(ballx),a
+	call	drawball
+	ei
+	ld	b,25
+alphaL1:
+	halt
+	djnz	alphaL1
+	ld	hl,(pad)
+	call	incDecHL
+	call	setMovement
+alphaS2:
+	jp	game
+
+;---------= 2nd pressed =---------
+stuck:	ld	a,$01
+	ld	(motion),a
+	ld	a,(bule)
+	or	a
+	jp	z,game
+	ld	bc,(bullet)
+	ld	a,(bullet+2)
+	or	c
+	jp	nz,game
+	ld	hl,bullet
+	ld	bc,(pad)
+	ld	(hl),c
+	ld	a,(padlen)
+	add	a,c
+	dec	a
+	inc	hl
+	inc	hl
+	ld	(hl),a
+	dec	hl
+	ld	a,51
+	ld	(hl),a
+	inc	hl
+	inc	hl
+	ld	(hl),a
+	dec	hl
+	call	drawb
+	dec	hl
+	dec	hl
+	call	drawb
+	jp	game
+
+;---------= Losser! =---------
+losser:	ld	hl,lvs
+	ld	a,(hl)
+	dec	a
+	ld	(hl),a
+	jp	nz,rstart
+exit:	call	settop
+	ld	hl,$0303
+	ld	(currow),hl
+	ld	hl,gmovr
+	bcall(_putps)
+	ld	hl,$0204
+	ld	(currow),hl
+	ld	hl,hscr+5
+	bcall(_puts)
+	ld	hl,(score)
+	bcall(_disphl)
+	ld	hl,(file)
+	dec	hl
+	dec	hl
+	push	hl
+	ld	e,(hl)
+	dec	hl
+	ld	d,(hl)
+	ld	hl,(score)
+	call	hiscr
+	pop	de
+	ex	de,hl
+	ld	(hl),e
+	dec	hl
+	ld	(hl),d
+	ld	hl,$0105
+	ld	(currow),hl
+	ld	hl,nhs
+	jr	nz,nobon
+	bcall(_putps)
+nobon:	call	wkey
+	jp	menu
+
+;---------= Winner! =---------
+winner:	ld	bc,(speed)
+	ld	a,$03
+	sub	c
+	rla	;2
+	rla	;4
+	rla	;8
+	rla	;16
+	ld	c,a
+	ld	b,$00
+	ld	hl,(score)
+	add	hl,bc
+	ld	(score),hl
+	ld	bc,(levct)
+	ld	hl,lev
+	ld	a,(hl)
+	inc	a
+	ld	(hl),a
+	sub	c
+	jp	nz,begin
+	ld	(lev),a
+	jp	begin
+
+;---------= Move right =---------
+opposite_lbl:
+mright:	ld	a,0
+	or	a
+	jr	nz,mleft2
+mright2:
+	call	drawpad
+	ld	hl,(pad)
+	inc	l
+	ld	a,h
+	add	a,l
+	cp	96
+	ld	a,l
+	jr	nz,moved
+	jr	movedx
+moved:	ld	(pad),a
+	ld	a,(motion)
+	or	a
+	jr	nz,movedx
+	call	drawball
+	ld	hl,ballx
+	ld	a,(hl)
+	cp	90
+	jr	nc,movedxp
+	inc	(hl)
+movedxp:
+	call	drawball
+movedx:	call	drawpad
+	jp	game
+
+;---------= Move left =---------
+mleft:	ld	a,(opposite)
+	or	a
+	jr	nz,mright2
+mleft2:	call	drawpad
+	ld	hl,pad
+	ld	a,(hl)
+	dec	a
+	jr	z,movedx
+	ld	(hl),a
+	ld	a,(motion)
+	or	a
+	jr	nz,movedx
+	call	drawball
+	ld	hl,ballx
+	ld	a,(hl)
+	cp	4
+	jr	c,movedxp
+	dec	(hl)
+	jr	movedxp
+
+;---------= Pause =---------
+pause:	ld	a,1
+	out	(3),a
+	ei
+	halt
+	jp	game
+
+;---------= Move the ball =---------
+moveball:
+	ld	a,(speed)
+	inc	a
+	add	a,a
+	ld	(ballct),a
+motion_lbl:
+	ld	a,0
+	or	a
+	ret	z
+	ld	hl,btmln
+	ld	a,(hl)
+	or	a
+	jr	z,nobtm
+	dec	a
+	ld	(hl),a
+	cp	$21
+	call	c,btmline
+nobtm:	ld	hl,bule
+	ld	a,(hl)
+	or	a
+	jr	z,nobule
+	dec	(hl)
+	call	z,drawgun
+nobule:	ld	hl,stick
+	ld	a,(hl)
+	or	a
+	jr	z,$+3 \ dec (hl)
+	ld	hl,heavyBall
+	ld	a,(hl)
+	or	a
+	jr	z,$+3 \ dec (hl)
+	ld	hl,crazyBall
+	ld	a,(hl)
+	or	a
+	jr	z,$+3 \ dec (hl)
+;-----> Actually move the ball...
+	ld	de,ballx
+	ld	hl,ballxv
+	ld	c,91
+	call	applyMovement
+	ld	de,bally
+	ld	hl,ballyv
+	ld	c,49
+	call	applyMovement
+	ld	a,(de)
+	cp	49
+	jr	c,nochkpd
+btmln_lbl:
+chkpad:	ld	a,0		; skip this routine is the line is on
+	or	a
+	jr	nz,nochkpd
+
+pad_lbl:
+	ld	hl,0		; check for paddle
+	call	incDecHL
+	ld	bc,(ballx)
+	ld	a,l
+	ld	b,h
+checkPadL1:
+	cp	c
+	jr	z,ckpd2
+	inc	a
+	djnz	checkPadL1
+	ld	a,$01
+	ld	(ovr),a
+
+ckpd2:	ld	a,c
+	cp	4
+	jr	c,checkPaddleS3
+	cp	92
+	jr	nc,checkPaddleS3
+	call	setMovement
+checkPaddleS3:
+stick_lbl:
+	ld	a,0
+	or	a
+	jr	z,nochkpd
+	xor	a
+	ld	(motion),a
+nochkpd:
+	jp	ckblk
+
+incDecHL:
+	dec	l	\	dec	l
+	dec	l	\	dec	l
+	inc	h	\	inc	h
+	inc	h	\	inc	h
+	ret
+
+setMovement:
+	ld	d,h		; set movement
+	ld	e,$04
+	call	div
+	ld	a,(ballx)
+	cp	90
+	ret	nc
+	cp	2
+	ret	c
+	ld	c,a
+	ld	a,l
+	ld	e,-2
+	ld	b,d
+spad0:	push	bc
+	ld	b,d
+spad1:	cp	c
+	jr	nz,spad2
+	ld	hl,ballxv
+	ld	(hl),e
+spad2:	inc	a
+	djnz	spad1
+spad3:	inc	e
+	jr	z,spad3
+	pop	bc
+	djnz	spad0
+	ret
+
+applyMovement:
+	ld	a,(de)
+	add	a,(hl)
+	ld	(de),a
+	cp	1
+	jr	c,applyMovementC1
+	cp	c
+	jr	c,applyMovementS1
+applyMovementC1:
+	ld	a,(hl)
+	neg
+	ld	(hl),a
+	ret
+applyMovementS1:
+	ld	a,c
+	cp	91
+	ret	nz
+crazyBall_lbl:
+	ld	a,0
+	or	a
+	ret	z
+	ld	b,3
+	call	ionRandom
+	dec	a
+	jr	z,applyMovementS1
+	ld	(hl),a
+	ret
+
+;---------= Check for a block =---------
+ckblk:	ld	b,2
+	xor	a
+	ld	(bulletHit),a
+checkBlockLoop:
+	push	bc
+ballyv_lbl:
+	ld	a,0
+	ld	bc,(bally)
+	add	a,c
+	cp	48
+	jr	nc,checkBlockS1
+	bit	7,a
+	jr	nz,checkBlockS1
+	ld	d,a
+	ld	e,$06
+	call	div
+	ld	(modulus),a
+	ld	a,d
+	ld	(yc),a
+ballxv_lbl:
+	ld	a,0
+	ld	bc,(ballx)
+	add	a,c
+	cp	92
+	jr	nc,checkBlockS1
+	bit	7,a
+	jr	nz,checkBlockS1
+	ld	d,a
+	ld	e,$0C
+	call	div
+	ld	a,d
+	ld	(xc),a
+	call	elim
+checkBlockS1:
+	ld	hl,ballx
+	inc	(hl)
+	inc	(hl)
+	inc	(hl)
+	ld	hl,bally
+	inc	(hl)
+	inc	(hl)
+	inc	(hl)
+	pop	bc
+	djnz	checkBlockLoop
+	ld	a,(hl)
+	sub	6
+	ld	(hl),a
+	ld	hl,ballx
+	ld	a,(hl)
+	sub	6
+	ld	(hl),a
+	ret
+
+hitBlock:
+bulletHit_lbl:
+	ld	a,0
+	or	a
+	ret	nz
+	ld	a,(heavyBall)
+	or	a
+	ret	nz
+	ld	hl,ballx
+	ld	a,(hl)
+	cp	3
+	ret	c
+	cp	90
+	ret	nc
+	inc	hl
+	ld	a,(hl)
+	cp	3
+	ret	c
+modulus_lbl:
+	ld	a,0
+	ld	hl,ballyv
+	cp	255
+	jr	z,hitBlockS1
+	cp	250
+	jr	z,hitBlockS1
+	ld	hl,ballxv
+hitBlockS1:
+	jp	applyMovementC1
+	
+
+elim:	ld	a,(yc)		; eliminate a block at xc,yc
+	ld	l,a
+	ld	h,$00
+	ld	d,h
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	a,(xc)
+	ld	e,a
+	add	hl,de
+	ld	de,level
+	add	hl,de
+	ld	(temp2),hl
+	ld	a,(hl)
+	ld	(temp),a
+	or	a
+	ret	z
+	cp	15
+	push	af
+heavyBall_lbl:
+	ld	a,0
+	or	a
+	jr	z,notHeavy
+	pop	af
+	jr	nz,elim2
+	ld	a,(blkct)
+	inc	a
+	ld	(blkct),a
+	jr	elim2
+notHeavy:
+	pop	af
+	jr	nz,elim2	; call & ret (relative)
+	jr	hitBlock
+
+elim2:	push	hl
+	call	hitBlock
+	pop	hl
+	xor	a
+	ld	(hl),a
+	ld	a,(yc)
+	inc	a
+	ld	b,a
+ell1:	add	a,5
+	djnz	ell1
+	sub	6
+	ld	(yc),a
+	ld	a,(xc)
+	inc	a
+	ld	b,a
+ell2:	add	a,11
+	djnz	ell2
+	sub	12
+	ld	(xc),a
+	ld	a,(temp)
+	push	af
+	call	drawBBlock
+	pop	af
+	cp	15
+	jr	z,els0
+	sub	$08		; set 2 hit to 1 hit
+	jr	c,els0
+temp2_lbl:
+	ld	hl,0
+	inc	a
+	ld	(hl),a
+	call	drawBBlock
+	jr	els2
+bonusProb_lbl:
+els0:	ld	a,3
+	add	a,a
+	ld	b,a
+	jr	z,els2
+	call	ionRandom
+	or	a
+	jr	nz,els2
+	ld	b,a
+	ld	hl,fall		; start a falling block
+ell3:	ld	a,(hl)
+	inc	hl
+	inc	hl
+	inc	hl
+	or	a
+	jr	nz,ell3
+	dec	hl
+	ld	de,(xc)
+	ld	(hl),d
+	dec	hl
+	ld	(hl),e
+	dec	hl
+	ld	b,number_of_bonuses+1
+	call	ionRandom
+	cp	number_of_bonuses
+	jr	nz,startBonusN
+	push	af
+	ld	b,number_of_bonuses-1
+	call	ionRandom
+	pop	bc
+	add	a,b
+startBonusN:
+	inc	a
+	ld	(hl),a
+	cp	number_of_bonuses+1
+	jr	c,startBonusN2
+	sub	number_of_bonuses
+startBonusN2:
+	ld	ix,blocks-12
+	ld	b,a
+	call	drawBBlockS1
+els2:	ld	hl,(score)
+	inc	hl
+doublePts_lbl:
+	ld	a,0
+	or	a
+	jr	z,elimS3
+	inc	hl
+elimS3:
+	ld	(score),hl
+	ld	hl,blkct
+	dec	(hl)
+	jr	nz,els1
+	ld	a,$01
+	ld	(win),a
+els1:	jp	dispscr
+
+;---------= Move down falling blocks =---------
+drop:	ld	a,(speed)
+	add	a,2
+	add	a,a
+	add	a,a
+	ld	(fallct),a
+	ld	de,fall
+dropl:	ld	a,(de)
+	or	a
+	jr	z,dropx
+	ld	(temp),a
+	push	de
+	call	drawblk
+	pop	de
+	ld	a,(de)
+	cp	number_of_bonuses+1
+	jr	c,bonusNotRandom
+	inc	a
+	cp	number_of_bonuses*2+1
+	jr	nz,bonusResetS
+	ld	a,number_of_bonuses+1
+bonusResetS:
+	ld	(de),a
+bonusNotRandom:
+	ld	(temp),a
+	inc	de
+	inc	de
+	ld	a,(de)
+	inc	a
+	ld	(de),a
+	cp	48
+	jp	nz,drops
+	dec	de
+	dec	de
+	xor	a
+	ld	(de),a
+	; test if paddle is here
+	ld	h,d
+	ld	l,e
+	inc	hl
+	ld	bc,(pad)
+	ld	a,(hl)		; xc start of block
+	add	a,$0C
+	cp	c
+	jr	c,dropx
+	ld	a,(padlen)
+	add	a,c
+	ld	c,a
+	ld	a,(hl)
+	cp	c
+	jr	nc,dropx
+	; paddle is here
+;---------= Power Up! =---------
+	push	de
+	ld	hl,bonusReturn
+	push	hl
+	ld	a,(temp)
+	cp	number_of_bonuses+1
+	jr	c,selectBonus
+	sub	number_of_bonuses+1
+	jr	nz,selectBonus
+	ld	a,number_of_bonuses
+selectBonus:
+	ld	l,a
+	ld	h,0
+	add	hl,hl
+	ld	de,bonusTable-2
+	add	hl,de
+	call	ldhlind
+	jp	(hl)
+bonusReturn:
+	pop	de
+	jr	dropx
+
+drops:	dec	de
+	dec	de
+	push	de
+	call	drawblk
+	pop	de
+dropx:	inc	de
+	inc	de
+	inc	de
+	ld	hl,fall+60
+	sbc	hl,de
+	jp	nz,dropl
+	ret
+drawblk:
+temp_lbl:
+	ld	a,0
+	cp	number_of_bonuses+1
+	jr	c,drawblk2
+	sub	number_of_bonuses
+drawblk2:
+	ld	b,a
+	ld	ix,blocks-12
+	push	de
+	ld	de,12
+drop1:	add	ix,de
+	djnz	drop1
+	pop	hl
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	ld	l,(hl)
+	jr	drawBBlockS2
+
+;---------= Draw Breakable Block =---------
+; In: (xc),(yc),b=type
+drawBBlock:
+	or	a
+	ret	z
+	ld	b,a
+	ld	ix,sblocks-12
+drawBBlockS1:
+	ld	de,12
+drawBBlockL1:
+	add	ix,de
+	djnz	drawBBlockL1
+xcyc_lbl:
+	ld	hl,0
+	ld	a,l
+	ld	l,h
+drawBBlockS2:
+	ld	b,6
+	push	af
+	push	bc
+	push	hl
+	call	ionPutSprite
+	pop	hl
+	pop	bc
+	pop	af
+	add	a,8
+	jp	ionPutSprite
+
+;---------= Move up bullets =---------
+bullup:	ld	hl,bullet
+	ld	b,$02
+bulll:	push	bc
+	ld	a,(hl)
+	or	a
+	jr	z,bulls1
+	call	drawb
+	inc	hl
+	ld	a,(hl)
+	dec	a
+	ld	(hl),a
+	dec	hl
+	jr	nz,bulls0
+	ld	(hl),a
+	jr	bulls1
+bulls0:	call	bttest
+	ld	a,(hl)
+	or	a
+	call	nz,drawb
+bulls1:	inc	hl
+	inc	hl
+	pop	bc
+	djnz	bulll
+	ret
+
+;---------= Draw Bullets =---------
+drawb:	push	hl
+	ld	a,(hl)
+	inc	hl
+	ld	e,(hl)
+	call	ionGetPixel
+	ld	b,a
+	xor	(hl)
+	ld	(hl),a
+	ld	de,12
+	add	hl,de
+	ld	a,b
+	xor	(hl)
+	ld	(hl),a
+	pop	hl
+	ret
+
+;---------= Test if bullet hit a block =---------
+bttest:	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ld	(xc),de
+	dec	hl
+	cp	46
+	ret	nc
+	push	hl
+	ld	d,a
+	ld	e,$06
+	call	div
+	ld	l,d
+	ld	a,d
+	ld	(yc),a
+	ld	h,$00
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	a,(xc)
+	ld	d,a
+	ld	e,$0C
+	call	div
+	ld	a,d
+	ld	e,a
+	ld	(xc),a
+	ld	d,$00
+	add	hl,de
+	ld	de,level
+	add	hl,de
+	ld	a,(hl)
+	pop	hl
+	or	a
+	ret	z
+	cp	$0F
+	jr	z,bttx
+	ld	a,(ballyv)
+	push	af
+	push	hl
+	ld	a,1
+	ld	(bulletHit),a
+	call	elim
+	pop	hl
+	pop	af
+	ld	(ballyv),a
+bttx:	ld	(hl),0
+	ret
+
+;---------= Draw the ball =---------
+drawball:
+ballxy_lbl:
+	ld	hl,0
+	ld	a,l
+	ld	l,h
+	ld	b,4
+	ld	ix,ball
+	jp	ionPutSprite
+
+;---------= Draw the paddle =---------
+drawpad:
+	ld	hl,(pad)
+	ld	e,h
+	ld	d,l
+drwp1:	push	de
+	ld	a,d
+	ld	e,53
+	call	ionGetPixel
+	pop	de
+	xor	(hl)
+	ld	(hl),a
+	ld	c,$0C
+	add	hl,bc
+	ld	(hl),a
+	inc	d
+	dec	e
+	jr	nz,drwp1
+bule_lbl:
+	ld	a,0
+	or	a
+	ret	z
+
+;---------= Draw the gun =---------
+drawgun:
+	ld	a,(pad)
+	ld	e,52
+	call	ionGetPixel
+	xor	(hl)
+	ld	(hl),a
+	ld	hl,(pad)
+	ld	a,h
+	add	a,l
+	dec	a
+	ld	hl,gbuf+(52*12)
+	ld	e,52
+	call	ionGetPixel
+	xor	(hl)
+	ld	(hl),a
+	xor	a
+	ret
+
+;---------= Display the score =---------
+dispscr:
+	ld	hl,57*256+78
+	ld	(pencol),hl
+
+score_lbl:
+	ld	hl,0
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld	a,$05
+dispScoreS1:
+	bcall(_dispop1a)
+	jp	vputblank
+
+;---------= Display Lives left =---------
+displvs:
+	ld	hl,57*256+50
+	ld	(pencol),hl
+lvs_lbl:
+	ld	a,0
+	bcall(_setxxop1)
+	ld	a,$02
+	bcall(_dispop1a)
+	ret
+
+;---------= Bottom line on/off =---------
+btmline:
+	ld	c,a
+	ld	hl,gbuf+(12*52)
+	ld	b,12
+btmlp:	ld	a,(hl)
+	cpl
+	ld	(hl),a
+	inc	hl
+	djnz	btmlp
+	ld	a,c
+	ret
+
+;-----------= Wait for a key press =-----------
+; I use this method instead of GetKey to prevent
+; apd which would mess up all the variables.
+wkey:	ld	b,15
+	ei
+wkey1:	halt
+	djnz	wkey1
+wkey2:
+	bcall(_getk)
+	or	a
+	jr	z,wkey2
+	ret
+
+;---------= Divide D by E =---------
+div:	; divide d by e and return d=answer
+	ld	a,d
+	ld	d,$00
+dv1:	sub	e
+	ret	c
+	inc	d
+	jr	dv1
+
+;---------= Dialog =---------
+	.db	13
+name:	.db	"Breakout v2.0",0
+abt:	.db	"by Joe Wingbermuehle",$00
+scr:	.db	"Score:",$00
+lives:	.db	"Lives:",$00
+lvl:	.db	"Level:",$00
+opt1:	.db	"2nd - Start",$00
+opt2:	.db	"ALPHA - Options",$00
+opt3:	.db	"DEL - Exit",$00
+opt4:	.db	"MODE - ",$00
+nhs:	.db	$0E,"New "
+hscr:	.db	"High Score:",$00
+bopt1:	.db	"UP/DOWN - Level:",$00
+	.db	"ALPHA - Speed:",$00
+	.db	"MODE - Bonus:",0
+	.db	"2nd - Save : DEL - Exit",$00
+gmovr:	.db	$0A,"Game Over! "
+search_string:
+	.db	"BO1JW",0
+
+;---------= Sprites =---------
+ball:	.db	%01100000
+	.db	%11110000
+	.db	%11110000
+	.db	%01100000
+
+; blocks on screen:	12 wide
+;			6 high
+blkdef:	.db	%01111111	; 1 hit
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%10000000
+	.db	%01111111
+	.db	%11100000
+	.db	%00010000
+	.db	%00010000
+	.db	%00010000
+	.db	%00010000
+	.db	%11100000
+	.db	%01111111	; 1 hit
+	.db	%11001001
+	.db	%10010010
+	.db	%10100100
+	.db	%11001001
+	.db	%01111111
+	.db	%11100000
+	.db	%00110000
+	.db	%01010000
+	.db	%10010000
+	.db	%00110000
+	.db	%11100000
+	.db	%01111111	; 1 hit
+	.db	%10101010
+	.db	%10101010
+	.db	%10101010
+	.db	%10101010
+	.db	%01111111
+	.db	%11100000
+	.db	%10110000
+	.db	%10110000
+	.db	%10110000
+	.db	%10110000
+	.db	%11100000
+	.db	%01111111	; 1 hit
+	.db	%10000000
+	.db	%10111111
+	.db	%10111111
+	.db	%10000000
+	.db	%01111111
+	.db	%11100000
+	.db	%00010000
+	.db	%11010000
+	.db	%11010000
+	.db	%00010000
+	.db	%11100000
+	.db	%01111111	; 1 hit
+	.db	%11010101
+	.db	%10101010
+	.db	%11010101
+	.db	%10101010
+	.db	%01111111
+	.db	%11100000
+	.db	%01010000
+	.db	%10110000
+	.db	%01010000
+	.db	%10110000
+	.db	%11100000
+	.db	%01111111	; 1 hit
+	.db	%10011001
+	.db	%10011001
+	.db	%11100110
+	.db	%11100110
+	.db	%01111111
+	.db	%11100000
+	.db	%10010000
+	.db	%10010000
+	.db	%01110000
+	.db	%01110000
+	.db	%11100000
+	.db	%01111111	; 1 hit
+	.db	%11100110
+	.db	%11001100
+	.db	%10011001
+	.db	%10110011
+	.db	%01111111
+	.db	%11100000
+	.db	%01110000
+	.db	%11010000
+	.db	%10010000
+	.db	%00110000
+	.db	%11100000
+	.db	%01111111	; not breakable
+	.db	%11111111
+	.db	%11111001
+	.db	%11111001
+	.db	%11111111
+	.db	%01111111
+	.db	%11100000
+	.db	%11110000
+	.db	%11110000
+	.db	%11110000
+	.db	%11110000
+	.db	%11100000
+blocks:	.db	%01010101	; +life
+	.db	%10100010
+	.db	%01110111
+	.db	%10100011
+	.db	%00000001
+	.db	%10101010
+	.db	%01010000
+	.db	%10000000
+	.db	%11010000
+	.db	%10000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; -life
+	.db	%10000010
+	.db	%00110111
+	.db	%10000011
+	.db	%00000001
+	.db	%10101010
+	.db	%01010000
+	.db	%10000000
+	.db	%11010000
+	.db	%10000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; +points
+	.db	%10000110
+	.db	%00001111
+	.db	%10010110
+	.db	%00000110
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%00010000
+	.db	%10000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; -points
+	.db	%10000110
+	.db	%00010110
+	.db	%10001111
+	.db	%00000110
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%10010000
+	.db	%00000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; 2x points
+	.db	%10011000
+	.db	%00001010
+	.db	%10010001
+	.db	%00011000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%10010000
+	.db	%00000000
+	.db	%10010000
+	.db	%10100000
+	.db	%01010101	; +level
+	.db	%10100000
+	.db	%01110101
+	.db	%10101110
+	.db	%00000100
+	.db	%10101010
+	.db	%01010000
+	.db	%10000000
+	.db	%11010000
+	.db	%10000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; -level
+	.db	%10000000
+	.db	%00110000
+	.db	%10000110
+	.db	%00000000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%11010000
+	.db	%00000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; restart level
+	.db	%10001110
+	.db	%00001011
+	.db	%10001110
+	.db	%00001001
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%00010000
+	.db	%00000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; long paddle
+	.db	%10000000
+	.db	%00010000
+	.db	%10111111
+	.db	%00010000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%10010000
+	.db	%11000000
+	.db	%10010000
+	.db	%10100000
+	.db	%01010101	; short paddle
+	.db	%10000000
+	.db	%00010000
+	.db	%10001111
+	.db	%00010000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%10010000
+	.db	%00000000
+	.db	%10010000
+	.db	%10100000
+	.db	%01010101	; inverse paddle
+	.db	%10000000
+	.db	%00100111
+	.db	%11111000
+	.db	%00100000
+	.db	%10101010
+	.db	%01010000
+	.db	%10000000
+	.db	%11010000
+	.db	%10000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; sticky ball
+	.db	%10000000
+	.db	%00000110
+	.db	%10111111
+	.db	%00000000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%00010000
+	.db	%11000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; heavy ball
+	.db	%10010110
+	.db	%00101111
+	.db	%10101111
+	.db	%00010110
+	.db	%10101010
+	.db	%01010000
+	.db	%10000000
+	.db	%01010000
+	.db	%01000000
+	.db	%10010000
+	.db	%10100000
+	.db	%01010101	; bottom line
+	.db	%10000000
+	.db	%00000000
+	.db	%11111111
+	.db	%00000000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%00010000
+	.db	%11100000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; machine gun
+	.db	%10000000
+	.db	%00100000
+	.db	%10111111
+	.db	%00000000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%01010000
+	.db	%11000000
+	.db	%00010000
+	.db	%10100000
+	.db	%01010101	; crazy ball
+	.db	%10000000
+	.db	%00101010
+	.db	%10010101
+	.db	%00000000
+	.db	%10101010
+	.db	%01010000
+	.db	%00000000
+	.db	%10010000
+	.db	%01000000
+	.db	%00010000
+	.db	%10100000
+
+vputblank:
+	ld	hl,spaceString
+	bcall(_vputs)
+	ret
+spaceString:
+	.db	" ",0
+
+ldhlind:
+	push	af
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	pop	af
+	ret
+
+;---------= High Score =---------
+; Input: de=previous high score
+;	hl=current score
+; Output: hl=high score
+;	z=1 (a=0) if new high score, z=0 (a=1) if not
+; Registers destroyed: af, de, hl
+hiscr:	push	hl
+	xor	a
+	sbc	hl,de
+	pop	hl
+	jr	z,nnhs
+	jr	nc,newhs
+nnhs:	ex	de,hl
+	inc	a
+	ret
+newhs:	or	a
+	ret
+
+;---------= Bonus Jump Table =---------
+bonusTable:
+	.dw	bonus0	; +life
+	.dw	bonus1	; -life
+	.dw	bonus2	; +points
+	.dw	bonus3	; -points
+	.dw	bonus4	; 2x points
+	.dw	bonus5	; +level
+	.dw	bonus6	; -level
+	.dw	bonus7	; restart
+	.dw	bonus8	; long paddle
+	.dw	bonus9	; short paddle
+	.dw	bonusA	; inverse paddle
+	.dw	bonusB	; sticky ball
+	.dw	bonusC	; heavy ball
+	.dw	bonusD	; bottom line
+	.dw	bonusE	; machine gun
+	.dw	bonusF	; crazy ball
+
+bonus0:	ld	hl,lvs
+	inc	(hl)
+bonus0a:
+	jp	displvs
+bonus1:	ld	hl,lvs
+	ld	a,(hl)
+	dec	a
+	jr	z,bonus1a
+	dec	(hl)
+	jr	bonus0a
+bonus1a:
+	ld	a,1
+	ld	(ovr),a
+	ret
+bonus2:	ld	bc,50
+	ld	a,(doublePts)
+	or	a
+	jr	z,$+4 \ ld c,100
+	ld	hl,(score)
+	add	hl,bc
+	jr	bonus3a
+bonus3:	ld	bc,50
+	ld	a,(doublePts)
+	or	a
+	jr	z,$+4 \ ld c,25
+	ld	hl,(score)
+	sbc	hl,bc
+	jr	nc,bonus3a
+	ld	hl,0
+bonus3a:
+	ld	(score),hl
+	jp	dispscr
+bonus4:	ld	a,1
+	ld	(doublePts),a
+	ret
+bonus5:	ld	a,1
+	ld	(win),a
+	ret
+bonus6:	ld	hl,lev
+	ld	a,(hl)
+	dec	a
+	cp	$FF
+	jr	nz,bonus6a
+	ld	a,(levct)
+	dec	a
+bonus6a:
+	ld	(hl),a
+bonus7:	ld	a,2
+	ld	(ovr),a
+	ret
+bonus8:	call	drawpad
+	ld	hl,(pad)
+	ld	a,h
+	add	a,4
+	ld	(padlen),a
+	add	a,l
+	cp	96
+	jr	c,bonus8a
+	ld	a,l
+	sub	4
+	ld	(pad),a
+bonus8a:
+	jp	drawpad
+bonus9:	call	drawpad
+	ld	hl,padlen
+	ld	c,4
+	ld	a,(hl)
+	sub	c
+	ld	(hl),a
+	cp	c
+	jr	nc,bonus8a
+	ld	a,c
+	ld	(hl),a
+	jr	bonus8a
+bonusA:	ld	hl,opposite
+	ld	a,(hl)
+	xor	1
+	ld	(hl),a
+	ret
+bonusB:	ld	a,$FF
+	ld	(stick),a
+	ret
+bonusC:	ld	a,$FF
+	ld	(heavyBall),a
+	ret
+bonusD:	ld	a,(btmln)
+	or	a
+	call	z,btmline
+	ld	a,$FF
+	ld	(btmln),a
+	ret
+bonusE:	ld	a,(bule)
+	or	a
+	call	z,drawgun
+	ld	a,$FF
+	ld	(bule),a
+	ret
+bonusF:	ld	a,$FF
+	ld	(crazyBall),a
+	ret
+
+.end
+END

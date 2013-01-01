@@ -1,0 +1,733 @@
+; Ion v1.6		|
+; by Joe Wingbermuehle	|
+; 20000617		|
+;-----------------------+
+; See ion.txt for information about Ion.
+; Visit my home page at joewing.net
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Storage Arrays and Function Locations
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+storage			=$FE70		; location to put variables and stuff
+progsize		=storage
+progtable		=storage+2	; VAT ptr table for the current page (16 bytes)
+keypress		=storage+18	; location to save the keypress for modules
+modtable		=storage+19	; module table (2 bytes per module + 0 terminator)
+libraryVectors		=cmdshad+80	; library vectors
+progname		=cmdshad+117	; store the program name in safe safe ram
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Internal Variables
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#define	moduleMode	moduleMode_lbl+1-ionStart+myLocation
+#define	selected	selected_lbl+1-ionStart+myLocation
+#define	number		number_lbl+1-ionStart+myLocation
+#define	timer		timer_lbl+1-ionStart+myLocation
+#define	progdes		progdes_lbl+1-ionStart+myLocation
+#define	loadMode	loadMode_lbl+1-ionStart+myLocation
+#define	progloc		progloc_lbl+1-ionStart+myLocation
+#define running		running_lbl+1-ionStart+myLocation
+#ifdef TI83P
+#define	flashPage	flashPage_lbl+1-ionStart+myLocation
+#endif
+#define	pageNumber	pageNumber_lbl+1-ionStart+myLocation
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Start of the Main Ion Program
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This is the first section of Ion to execute after prgm0ION falls through.
+Restart:
+	set	0,(iy+3)	; graph is dirty
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Detect Modules
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This routine sets up the module table modtable with module addresses.
+	ld	hl,moduleMode
+	ld	(hl),1		; tell FindProgram that we want to find modules
+	push	hl
+	ld	de,modtable
+	ld	hl,(vat)
+getModulesLoop:
+	push	de
+	call	FindProgram-ionStart+myLocation
+	pop	de
+	jr	nz,getModulesDone
+	push	hl
+	ld	hl,(progloc)	; start
+#ifdef TI83P
+	dec	hl		; ap2
+	dec	hl		; ap1
+#endif
+	dec	hl		; size msb
+	ex	de,hl
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	inc	hl
+	ex	de,hl
+	pop	hl
+	jr	getModulesLoop
+getModulesDone:
+	xor	a
+	ld	(de),a
+	pop	hl		; hl->moduleMode
+	ld	(hl),a		; we now want programs, not modules
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Initialize and Run Modules
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This routine initializes Ion and executes modules with code 255.
+running_lbl:
+	ld	a,$FF
+	or	a		; $00 if running, $FF if first time, $01 if restart
+	jr	z,skipInitialization
+	ld	(keypress),a
+	call	RunModules-ionStart+myLocation
+	ld	(selected),a	; RunModules returns a=0
+	ld	(pageNumber),a
+skipInitialization:
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Draw the User Interface
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This is a routine to draw the Ion interface screen.
+RedrawScreen:
+	bcall(_indicatorOff)
+	bcall(_cleargbuf)
+	set	7,(iy+20)
+	ld	hl,$0001
+	ld	(pencol),hl
+	ld	hl,topText-ionStart+myLocation
+	bcall(_vputs)
+	ld	hl,gbuf+(6*12)
+	ld	de,gbuf+(56*12)
+	ld	b,12
+	xor	a
+	ld	(number),a
+	dec	a
+drawLinesLoop:
+	ld	(hl),a
+	ld	(de),a
+	inc	hl
+	inc	de
+	djnz	drawLinesLoop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Detect and Display Programs
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This is a set of routines to detect/display pages of eight programs.
+; SelectPage	Displays page pageNumber
+; FirstPage	Displays the first page by resetting pageNumber
+SelectPage:
+	ld	hl,(vat)
+pageNumber_lbl:
+	ld	a,$00
+	or	a
+	jr	z,onFirstPage
+	add	a,a
+	add	a,a
+	add	a,a
+	ld	b,a
+selectPageLoop:
+	push	bc
+	call	FindProgram-ionStart+myLocation
+	pop	bc
+	jr	nz,FirstPage
+	djnz	selectPageLoop
+	jr	onFirstPage
+FirstPage:
+	xor	a
+	ld	(pageNumber),a
+	jr	SelectPage
+onFirstPage:
+	ld	de,progtable
+	ld	bc,8*256+7
+dispProgLoop:
+	ex	de,hl
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	inc	hl
+	ex	de,hl
+	push	de
+	push	bc
+	call	FindProgram-ionStart+myLocation
+	pop	bc
+	jr	nz,noMorePrograms
+	push	hl
+	ld	hl,number
+	inc	(hl)
+	ld	h,c
+	ld	l,a
+	ld	(pencol),hl
+progdes_lbl:
+	ld	hl,$0000
+	bcall(_vputs)
+	pop	hl
+	pop	de
+	ld	a,c
+	add	a,6
+	ld	c,a
+	djnz	dispProgLoop
+	push	de
+noMorePrograms:
+	pop	de
+number_lbl:
+	ld	a,$00
+	or	a
+	jr	nz,pmain
+	ld	a,(running)
+	res	7,(iy+20)
+	or	a
+	ret	nz		; return if no programs found
+	ld	(pageNumber),a
+RedrawScreen_rel:
+	jp	RedrawScreen-ionStart+myLocation
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Main User Interface Loop
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pmain:	set	7,(iy+20)
+	call	HighlightProgram-ionStart+myLocation
+pmain2:	res	7,(iy+20)
+	call	fastCopy-ionStart+myLocation
+pmain3:	ld	h,$10
+	ld	(timer),hl
+main:	res	4,(iy+9)
+	ei
+	halt \ halt
+	bcall(_getk)
+	bit	4,(iy+9)	; on
+	jr	nz,turnOff
+timer_lbl:
+	ld	hl,$0000
+	ld	de,1
+	sbc	hl,de
+	ld	(timer),hl
+	jr	z,turnOff
+	or	a
+	jr	z,main
+	ld	(keypress),a
+	dec	a		; down 1
+	jr	z,moveDown
+	dec	a		; left 2
+	jr	nz,checkRight
+	ld	hl,pageNumber
+	dec	(hl)
+RedrawScreenFirst:
+	xor	a
+	ld	(selected),a
+	jr	RedrawScreen_rel
+checkRight:
+	dec	a
+	jr	nz,checkUp
+	ld	hl,pageNumber
+	inc	(hl)
+	jr	RedrawScreenFirst
+checkUp:
+	dec	a		; up 4
+	jr	z,moveUp
+	cp	9-4		; enter
+	jr	z,executeProgram_rel
+	cp	55-4		; mode
+	jr	nz,continueRunning
+
+quickExit:
+	ld	a,$FF
+	ld	(running),a
+	jr	RunModules
+continueRunning:
+	cp	53-4		; Y=
+executeProgram_rel:
+	jr	z,ExecuteProgram
+	ld	hl,RedrawScreen-ionStart+myLocation
+	push	hl
+	jr	RunModules
+
+; Turn off the calculator
+turnOff:
+	ld	a,1
+	out	(3),a
+	halt
+	jr	pmain3
+
+; Move up/down the program list
+moveUp:	call	DeselectProgram-ionStart+myLocation
+	ld	a,(hl)
+	or	a
+	jr	z,setDown
+	dec	(hl)
+pmainr:	jr	pmain
+moveDown:
+	call	DeselectProgram-ionStart+myLocation
+	ld	a,(hl)
+	sub	e
+	jr	z,setUp
+	inc	(hl)
+	jr	pmainr
+setDown:
+	ld	(hl),e
+	jr	pmainr
+setUp:	ld	(hl),a
+	jr	pmainr
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Execute Ion Modules
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This routine runs the modules in modtable with key code keypress.
+RunModules:
+	ld	hl,modtable
+runModulesLoop:
+	ld	a,(hl)
+	or	a
+	ret	z		; RunModules must return a=0
+	ld	e,a
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	push	hl
+	ex	de,hl		; pointer in hl
+	ld	de,sram
+	ld	b,(hl)		; size msb
+	dec	hl
+	ld	c,(hl)		; size lsb
+	inc	hl		; size msb
+#ifdef TI83P
+	inc hl \ inc hl		; skip AsmPrgm token
+	dec bc \ dec bc		; account for size
+#endif
+	inc	hl
+	push	bc
+	push	de
+	push	hl
+	ldir			; load module
+	ld	hl,moduleReturn-ionStart+myLocation
+	push	hl
+	ld	hl,progname
+	rst	20h
+	xor	a
+	ld	(op1+1+8),a
+	ld	a,(keypress)
+	jp	sram+2		; call module
+moduleReturn:
+	pop	de
+	pop	hl
+	pop	bc
+	ldir			; unload module
+	pop	hl
+	or	a
+	jr	nz,runModulesLoop
+	inc	a
+	ld	(running),a
+	pop	hl		; don't return
+	jp	progstart	; restart
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Deselect a Program
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This routine removes the highlight from a program number.
+DeselectProgram:
+	call	DrawHighlight-ionStart+myLocation
+	ld	hl,selected
+	ld	de,(number)
+	dec	e
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Execute a Program
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; This routine executes the program at progloc with size progsize if possible.
+ExecuteProgram:
+	ld	hl,Restart-ionStart+myLocation
+	push	hl	; this is to where we will return
+#ifdef TI83P
+; If the program is in Flash, move it to RAM.
+; If there isn't enough RAM, restart Ion.
+	ld	a,(flashPage)
+	or	a
+	jr	z,alreadyInRam
+	ld	hl,(progsize)
+	ld	de,20
+	add	hl,de
+	bcall(_enoughRam)
+	ret	c
+	call	swapFlash-ionStart+myLocation
+alreadyInRam:
+#endif
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Load Library Vectors
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Load the library vectors before executing the program
+	ld	hl,libraryVectors			; location to load vectors
+	ld	de,routinePointers-ionStart+myLocation	; location to get routine pointers
+	ld	b,NUMBER_OF_LIBRARIES
+loadVectorLoop:
+	push	bc
+	push	hl
+	ex	de,hl
+	ld	c,(hl)
+	inc	hl
+	ld	b,(hl)
+	inc	hl
+	ex	de,hl
+	ld	hl,(progsize)
+	add	hl,bc
+	ld	b,h
+	ld	c,l
+	pop	hl
+	ld	(hl),$C3		; jp
+	inc	hl
+	ld	(hl),c
+	inc	hl
+	ld	(hl),b
+	inc	hl
+	pop	bc
+	djnz	loadVectorLoop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Load and Execute the Program Loader
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Load the program loader and jump to it
+	ld	hl,scrLoc_lbl2-loadProgram+cmdshad+1
+	ld	(scrLoc_lbl1-ionStart+myLocation+1),hl
+	ld	hl,destLoc_lbl2-loadProgram+cmdshad+1
+	ld	(destLoc_lbl1-ionStart+myLocation+2),hl
+	ld	a,$37	; scf
+	ld	(loading_lbl-ionStart+myLocation),a
+	ld	hl,preLoader-ionStart+myLocation
+	ld	de,sram
+	ld	bc,preLoaderEnd-preLoader
+	push	de
+	ldir
+	ret
+
+preLoader:
+#ifdef TI83P
+	ld	hl,swapFlash-ionStart+myLocation
+	push	hl	; swap flash
+#endif
+	ld	hl,loadProgramLoop-loadProgram+cmdshad
+	push	hl	; unload program first
+	ld	de,cmdshad
+	ld	hl,loadProgram-ionStart+myLocation
+	ld	bc,loadProgramEnd-loadProgram
+	ldir
+progloc_lbl:
+	ld	hl,$0000
+	ld	de,progstart
+	ld	bc,(progsize)
+	push	bc
+	push	de
+	call	loadProgramLoop-loadProgram+cmdshad
+	pop	de
+	push	de
+	push	hl
+	ld	(destLoc_lbl2-loadProgram+cmdshad+1),hl
+	ld	(scrLoc_lbl2-loadProgram+cmdshad+1),de
+	ld	a,$B7	; or a
+	ld	(loading_lbl-loadProgram+cmdshad),a
+	ld	hl,op5
+	ld	(scrLoc_lbl1-loadProgram+cmdshad+1),hl
+	ld	(destLoc_lbl1-loadProgram+cmdshad+2),hl
+	bcall(_clrscrf)
+	bcall(_cleargbuf)
+	xor	a
+	jp	cmdshad
+preLoaderEnd:
+
+loadProgram:
+	call	progstart+1
+	pop	de
+	pop	hl
+	pop	bc
+	ret
+loadProgramLoop:
+	push	bc
+	push	de
+	push	hl
+	ld	de,769
+loadProgramLoop2:
+	ld	h,b
+	ld	l,c
+	dec	de
+	or	a
+	sbc	hl,de
+	jr	c,loadProgramLoop2
+	ld	b,d
+	ld	c,e
+	pop	hl
+	push	bc
+	push	hl
+	ld	de,gbuf
+	ldir
+scrLoc_lbl1:
+	ld	($0000),hl	; either load to op5 or scrLoc_lbl2
+	pop	hl
+	pop	de
+	push	de
+	bcall(_deletemem)	; de bytes from hl
+	pop	de
+	pop	hl
+loading_lbl:
+	scf	; scf on load, or a on unload
+	jr	c,loading
+	sbc	hl,de
+loading:
+	ex	de,hl
+	push	hl
+	bcall(_insertmem)	; hl bytes to de
+	pop	bc
+	ld	hl,gbuf
+	push	bc
+	ldir
+	pop	bc
+destLoc_lbl1:
+	ld	($0000),de
+destLoc_lbl2:
+	ld	de,$0000
+	pop	hl
+	or	a
+	sbc	hl,bc
+	ld	b,h
+	ld	c,l
+scrLoc_lbl2:
+	ld	hl,$0000
+	jr	nz,loadProgramLoop
+	ret
+loadProgramEnd:
+
+#ifdef TI83P
+swapFlash:
+flashPage_lbl:
+	ld	a,$00
+	or	a
+	ret	z
+	ld	hl,progname
+	rst	20h
+	ld	a,5
+	ld	(op1),a
+	rst	18h
+	bcall(_archUnarch)
+	bcall(_popop1)
+	bcall(_chksysvar)	; de -> size lsb
+	inc	de		; de -> size msb
+	inc	de		; de -> AsmPrgm byte1
+	inc	de		; de -> AsmPrgm byte2
+	inc	de		; de -> start of code
+	ld	(progloc),de
+	ret
+#endif
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Highlight a Program
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Highlight the selected program and display information.
+HighlightProgram:
+	xor	a
+	ld	(running),a		; if we got here, we found a program!
+	call	DrawHighlight-ionStart+myLocation
+	add	hl,hl
+	ld	de,progtable
+	add	hl,de
+	bcall(_ldhlind)
+	call	FindProgram-ionStart+myLocation
+	ld	a,$02		; run bottom-line modules
+	ld	(keypress),a
+	jp	RunModules-ionStart+myLocation
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Draw the highlight
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+DrawHighlight:
+selected_lbl:
+	ld	hl,$0000
+	push	hl
+	ld	h,72
+	bcall(_htimesl)
+	ld	de,gbuf+(7*12)
+	add	hl,de
+	ld	b,7*12
+highlightLoop:
+	ld	a,(hl)
+	cpl
+	ld	(hl),a
+	inc	hl
+	djnz	highlightLoop
+	pop	hl
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Find Next Ion Program/Module
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Look up a program (or module if moduleMode!=0) in the VAT
+; and store its information in the appropriate variables.
+FindProgram:
+	ld	de,(ptemp)
+	bcall(_cphlde)
+	ld	a,(hl)
+	jr	nz,FoundProgram
+	inc	a
+	ret
+FoundProgram:
+	push	hl
+	and	$01
+	jr	nz,findProgramSkip
+
+; | <-NAME | len | page | msb | lsb | xx | xx | type |
+; | size | AsmPrgm1 | AsmPrgm2 | code |
+; Program format:
+;	ret | xor a		; ret if libs used, xor a otherwise
+;	jr start_of_code
+;	.db	"Program Description",0
+
+#ifdef TI83P
+	dec	hl	; x1
+	dec	hl	; x2
+	dec	hl	; lsb ptr
+	ld	e,(hl)
+	dec	hl	; msb ptr
+	ld	d,(hl)
+	dec	hl	; page
+	ld	a,(hl)
+	ld	(flashPage),a
+	push	hl
+	ex	de,hl			; hl->size bytes
+	push	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	inc	hl
+	ld	(progloc),hl
+	pop	hl
+	ld	de,appBackupScreen
+	ld	bc,64
+	push	af
+	push	de
+	bcall(_flashToRam)
+	pop	hl
+	pop	af
+	or	a
+	jr	z,findProgramRam
+	ld	bc,9
+	add	hl,bc
+	ld	c,(hl)
+	add	hl,bc
+	inc	hl
+findProgramRam:
+	ld	c,(hl)	; size lsb
+	inc	hl
+	ld	b,(hl)	; size msb
+	dec	bc
+	dec	bc
+	ld	(progsize),bc
+	inc	hl	; AsmPrgm1
+	inc	hl	; AsmPrgm2
+	inc	hl	; hl-> ret | xor a
+	ld	a,(hl)
+	cp	$AF	; xor a
+	jr	z,findProgramGood
+	cp	$C9	; ret
+	jr	nz,findProgramBad
+findProgramGood:
+	inc	hl	; jr
+moduleMode_lbl:
+	ld	a,$00
+	or	a
+	jr	z,programMode
+	ld	a,(flashPage)
+	or	a
+	jr	nz,findProgramBad
+	ld	a,(hl)
+	cp	MODULE_COMPATIBILITY
+	jr	nz,findProgramBad
+	pop	hl
+	pop	hl
+	jr	findProgramSkipEntry
+programMode:
+#else
+	dec	hl	; lsb ptr
+	ld	e,(hl)
+	dec	hl	; msb ptr
+	ld	d,(hl)
+	push	hl
+	ex	de,hl	; hl->size lsb
+	ld	c,(hl)
+	inc	hl	; size msb
+	ld	b,(hl)
+	ld	(progsize),bc
+	inc	hl	; hl-> ret | xor a
+	ld	a,(hl)
+	cp	$AF	; xor a
+	jr	z,findProgramGood
+	cp	$C9	; ret
+	jr	nz,findProgramBad
+findProgramGood:
+	ld	(progloc),hl
+	inc	hl
+moduleMode_lbl:
+	ld	a,$00
+	or	a
+	jr	z,programMode
+	ld	a,(hl)
+	cp	MODULE_COMPATIBILITY
+	jr	nz,findProgramBad
+	pop	hl
+	pop	hl
+	jr	findProgramSkipEntry
+programMode:
+#endif
+	ld	a,(hl)
+	cp	$30	; jr nc
+	jr	nz,findProgramBad
+	inc	hl	; xx
+	inc	hl	; description
+	ld	(progdes),hl
+	pop	hl
+	dec	hl
+	ld	b,(hl)
+	ld	de,progname+1
+findProgramNameLoop:
+	dec	hl
+	ld	a,(hl)
+	ld	(de),a
+	inc	de
+	djnz	findProgramNameLoop
+	xor	a
+	ld	(de),a
+	pop	hl
+	jr	findProgramSkipEntry
+findProgramBad:
+	pop	hl
+findProgramSkip:
+	pop	hl
+	call	findProgramSkipEntry-ionStart+myLocation
+	jp	FindProgram-ionStart+myLocation
+
+findProgramSkipEntry:
+#ifdef	TI83P
+	ld	bc,-6
+	add	hl,bc
+#else
+	dec	hl
+	dec	hl
+	dec	hl
+#endif
+	ld	b,(hl)
+	dec	hl
+findProgramSkipEntryLoop:
+	dec	hl
+	djnz	findProgramSkipEntryLoop
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Static Data
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+topText:
+	.db	"Ion ",VERSION_MAJOR+'0'
+	.db	'.',VERSION_MINOR+'0'
+	.db	" - Joe Wingbermuehle",0
+
+; End of Ion System Code by Joe Wingbermuehle
