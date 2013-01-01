@@ -1,0 +1,604 @@
+
+;+------------------------------------------------------+
+;|			 DStar v2.6			|
+;|		     by Joe Wingbermuehle		|
+;|			  07-01-1998			|
+;+------------------------------------------------------+
+
+; Visit my home page at:  http://joewing.net
+
+; Port to ION made by Jason Kovacs (Jason_K@calc.org)
+
+#include "ion.inc"
+
+#define xc		saferam1+0	;8265h
+#define yc		saferam1+2	;8267h
+#define	loc		saferam1+4	;8269h
+#define loc2		saferam1+6	;826Bh
+#define xloc		saferam1+8	;826Dh
+#define yloc		saferam1+10	;826Fh
+#define tmp		saferam1+12	;8271h
+#define pieces		saferam1+14	;8273h
+#define moves		saferam1+16	;8275h
+#define lev		saferam1+18	;8277h
+#define mvt		saferam1+19	;8278h
+#define level		saferam1+20	;8279h
+
+#define	number_of_levels	10
+
+#ifdef TI83P
+	.org progstart-2
+	.db $BB,$6D
+#else
+	.org progstart
+#endif
+	ret
+	jr nc, Start_Of_Program
+
+Description:
+	.db "DStar v2.6  by Joe W",0
+
+Start_Of_Program:
+;---------- Start of program ----------
+	ld		hl,xc
+	ld		(hl),0
+	ld		de,xc+1
+	ld		bc,level-xc
+	ldir
+	ld		a,1
+	ld		(lev),a
+
+;---------= Decompress/Load level =---------
+start:	ld		a,1
+	ld		(mvt),a
+	ld		hl,levels-26
+	ld		a,(lev)
+	ld		b,a
+	ld		de,26
+lslp1:	add		hl,de
+	djnz		lslp1
+	ld		de,level
+	ld		b,12
+	ld		a,$01
+lllp0:	ld		(de),a
+	inc		de
+	djnz		lllp0
+	ld		bc,21*256+3
+	call		ionDecompress		; decompress
+
+	ld		b,12
+	ld		a,$01
+lllp2:	ld		(de),a
+	inc		de
+	djnz		lllp2
+	ld		a,(hl)
+	ld		(yloc),a
+	ld		(yc),a
+	inc		hl
+	ld		a,(hl)
+	ld		(xloc),a
+	ld		(xc),a
+	push		hl
+	call		align
+	ld		(loc2),hl
+	pop		bc
+	inc		bc
+	ld		a,(bc)
+	ld		(yc),a
+	inc		bc
+	ld		a,(bc)
+	ld		(xc),a
+	call		align
+	ld		(loc),hl
+	inc		bc
+	ld		a,(bc)
+	ld		(pieces),a
+begin:	ld		a,$01
+	ld		(mvt),a
+	ld		b,108
+	ld		de,level
+	ld		ix,gbuf
+dlp1:	push		bc
+	ld		a,(de)
+	inc		a
+	ld		hl,stuff-7
+	ld		bc,$0007
+dlp2:	add		hl,bc
+	dec		a
+	jr		nz,dlp2
+	ld		b,$07
+dlp3:	ld		a,(hl)
+	ld		(ix),a
+	inc		hl
+	push		bc
+	ld		bc,$000C
+	add		ix,bc
+	pop		bc
+	djnz		dlp3
+	ld		bc,-1*(7*12-1)
+	add		ix,bc
+	pop		bc
+	ld		c,$0C
+	dec		b
+	call		mod
+	jr		nz,dsk
+	push		bc
+	ld		bc,6*12
+	add		ix,bc
+	pop		bc
+dsk:	inc		b
+	inc		de
+	djnz		dlp1
+
+	ld		bc,(12*6)*256+0
+	ld		hl,gbuf+((12*64)-(12*6))
+filllp:	ld		(hl),c
+	inc		hl
+	djnz		filllp
+
+	set		7,(iy+20)	; write to graphbuffer
+
+	call		swap
+	call		swap
+
+;---------= Main program loop =---------
+main:	xor		a
+	ld		(mvt),a
+	ld		a,(pieces)
+	or		a
+	jp		z,won
+	ld		hl,$3A00
+	ld		(pencol),hl
+	ld		hl,nxlv
+	bcall(_vputs)
+	ld		a,(lev)
+	bcall(_setxxop1)
+	ld		a,$03
+	bcall(_dispop1a)
+	ld		hl,blank
+	bcall(_vputs)
+	ld		hl,numm
+	bcall(_vputs)
+	ld		hl,(moves)
+	ld		a,h
+	and		l
+	cp		$FF
+	jr		z,lost
+	bcall(_setxxxxop2)
+	bcall(_op2toop1)
+	ld		a,$05
+	bcall(_dispop1a)
+	ld		a,67
+	ld		(pencol),a
+	ld		hl,help1
+	bcall(_vputs)
+	call		ionFastCopy
+
+keylp:	bcall(_getcsc)
+	dec		a
+	jp		z,mdown
+	dec		a
+	jp		z,mleft
+	dec		a
+	jp		z,mright
+	dec		a
+	jp		z,mup
+	cp		$36-4
+	jp		z,mswap
+	cp		$30-4
+	jp		z,start
+	cp		$31-4
+	jp		z,loadgame
+	cp		$32-4
+	jp		z,savegame
+	cp		$38-4
+	jr		z, lost
+	cp		$0F-4
+	jr		nz,keylp
+
+;---------- We have a loser! ----------
+lost:	ld		hl,losser
+exit:	set		3,(iy+5)
+	ld		bc,$0403
+	ld		(currow),bc
+	bcall(_putps)
+	res		3,(iy+5)
+	jp		wkey
+
+;---------- We have a winner! ----------
+won:	ld		a,(lev)
+	inc		a
+	ld		(lev),a
+	cp		number_of_levels+1
+	jp		nz,start
+	ld		hl,winner
+	jr		exit
+
+;---------- Swap pieces ----------
+mswap:	call		swap
+	jp		main
+
+swap:	ld		a,(loc)
+	ld		bc,(loc2)
+	ld		(loc),bc
+	ld		(loc2),a
+	ld		de,p2
+	call		sprite
+	ld		a,(xloc)
+	ld		bc,(xc)
+	ld		(xc),a
+	ld		(xloc),bc
+	ld		a,(yloc)
+	ld		bc,(yc)
+	ld		(yloc),bc
+	ld		(yc),a
+	ld		de,p1
+	jp		sprite
+
+;---------- Move Left ----------
+mleft:	ld		bc,(loc)
+	dec		bc
+	ld		a,(loc2)
+	cp		c
+	jp		z,main
+	ld		hl,level
+	add		hl,bc
+	ld		a,(hl)
+	or		a
+	jr		nz,mlc
+mlcn:	ld		(loc),bc
+	ld		de,p3
+	call		sprite
+	ld		a,(xc)
+	dec		a
+	ld		(xc),a
+	ld		de,p1
+	call		sprite
+	jr		mLeft
+mlc:	cp		$02
+	jp		nz,main
+	ld		a,(pieces)
+	dec		a
+	ld		(pieces),a
+	xor		a
+	ld		(hl),a
+	jr		mlcn
+
+;---------- Move Right ----------
+mright:	ld		bc,(loc)
+	inc		bc
+	ld		a,(loc2)
+	cp		c
+	jp		z,main
+	ld		hl,level
+	add		hl,bc
+	ld		a,(hl)
+	or		a
+	jr		nz,mrc
+mrcn:	ld		(loc),bc
+	ld		de,p3
+	call		sprite
+	ld		a,(xc)
+	inc		a
+	ld		(xc),a
+	ld		de,p1
+	call		sprite
+	jr		mright
+mrc:	cp		$02
+	jp		nz,main
+	ld		a,(pieces)
+	dec		a
+	ld		(pieces),a
+	xor		a
+	ld		(hl),a
+	jr		mrcn
+
+;---------- Move Up ----------
+mup:	ld		a,(loc)
+	sub		12
+	ld		(tmp),a
+	ld		bc,(tmp)
+	ld		a,(loc2)
+	cp		c
+	jp		z,main
+	ld		hl,level
+	add		hl,bc
+	ld		a,(hl)
+	or		a
+	jr		nz,muc
+mucn:	ld		(loc),bc
+	ld		de,p3
+	call		sprite
+	ld		a,(yc)
+	dec		a
+	ld		(yc),a
+	ld		de,p1
+	call		sprite
+	jr		mup
+muc:	cp		$02
+	jp		nz,main
+	ld		a,(pieces)
+	dec		a
+	ld		(pieces),a
+	xor		a
+	ld		(hl),a
+	jr		mucn
+
+;---------- Move Down ----------
+mdown:	ld		a,(loc)
+	add		a,12
+	ld		(tmp),a
+	ld		bc,(tmp)
+	ld		a,(loc2)
+	cp		c
+	jp		z,main
+	ld		hl,level
+	add		hl,bc
+	ld		a,(hl)
+	or		a
+	jr		nz,mdc
+mdcn:	ld		(loc),bc
+	ld		de,p3
+	call		sprite
+	ld		a,(yc)
+	inc		a
+	ld		(yc),a
+	ld		de,p1
+	call		sprite
+	jr		mdown
+mdc:	cp		$02
+	jp		nz,main
+	ld		a,(pieces)
+	dec		a
+	ld		(pieces),a
+	xor		a
+	ld		(hl),a
+	jr		mdcn
+
+;---------- Display a 8*7 sprite ----------
+sprite:	ld		hl,plotsscreen-(12*7)
+	ld		a,(yc)
+	inc		a
+	ld		bc,12*7
+slp1:	add		hl,bc
+	dec		a
+	jr		nz,slp1
+	ld		a,(xc)
+	ld		c,a
+	add		hl,bc
+	ld		b,$07
+slpb:	ld		a,(de)
+	ld		(hl),a
+	inc		de
+	push		bc
+	ld		bc,$000C
+	add		hl,bc
+	pop		bc
+	djnz		slpb
+	ld		a,(mvt)
+	or		a
+	ret		nz
+	inc		a
+	ld		(mvt),a
+	ld		hl,(moves)
+	inc		hl
+	ld		(moves),hl
+	ret
+
+;---------- Wait for a keypress ----------
+wkey:	ei
+	halt
+	bcall(_getcsc)
+	or		a
+	jr		z,wkey
+	ret
+
+;---------= Align hl to (xc,yc) =---------
+align:	ld		a,(yc)
+	ld		l,a
+	ld		e,a
+	ld		h,$00
+	ld		d,h
+	add		hl,de
+	add		hl,de
+	add		hl,hl
+	add		hl,hl
+	ld		a,(xc)
+	ld		e,a
+	add		hl,de
+	ret
+
+;---------= Find the Modulus of b/c =---------
+mod:	ld		a,b
+modlp:	sub		c
+	ret		c
+	jr		nz,modlp
+	ret
+
+;---------= Save a Game =---------
+savegame:
+	ld		de,savearea
+	ld		hl,xc
+	ld		bc,$0084
+	ldir
+	set		3,(iy+5)
+	ld		hl,1*256+3
+	ld		(currow),hl
+	ld		hl,svtxt
+	bcall(_putps)
+	res		3,(iy+5)
+	call		wkey
+saved:	jp		main
+
+;---------= Load a Game =---------
+loadgame:
+	ld		hl,savearea
+	ld		a,(hl)
+	or		a		; make sure there is a saved game
+	jr		z,saved
+	ld		de,xc
+	ld		bc,$0084
+	ldir
+	jp		begin
+
+;---------= Messages =----------
+nxlv:	.db		"Lev: ",0
+numm:	.db		"Moves:"
+blank:	.db		" ",0
+losser:	.db		8,"You Lost"
+winner:	.db		8,"You Won!"
+dstar:	.db		"DStar v2.6 by Joe "
+	.db		"Wingbermuehle",$00
+svtxt:	.db		14,"- Game Saved -"
+help1:	.db		"Sav        Ld",0
+
+;---------= Sprite Data =---------
+p3:
+stuff:
+	.db		$00,$00,$00,$00,$00,$00,$00
+	.db		11110111b
+	.db		11110111b
+	.db		11110111b
+	.db		00000000b
+	.db		10111111b
+	.db		10111111b
+icon:	.db		00000000b
+	.db		00000000b
+	.db		00000000b
+	.db		00011000b
+	.db		00100100b
+	.db		00100100b
+	.db		00011000b
+	.db		00000000b
+	.db		%11111110
+	.db		%10000010
+	.db		%10000010
+	.db		%10000010
+	.db		%10000010
+	.db		%11111110
+p1:	.db		00000000b
+	.db		00000000b
+	.db		00011000b
+	.db		00101100b
+	.db		00111100b
+	.db		00011000b
+p2:	.db		00000000b
+	.db		01000100b
+	.db		00111000b
+	.db		00101000b
+	.db		00111000b
+	.db		01000100b
+	.db		00000000b
+
+;---------- Level Data ----------
+; each level is 26 bytes
+; %00 = nothing
+; %01 = wall
+; %10 = dot
+; %11 = stopper
+
+savearea:
+	.db	$00
+	.ds	$0083
+
+levels:
+	.db	%01000100,%00000000,%00000101
+	.db	%01000100,%00000000,%10000101
+	.db	%01000101,%00001000,%00000001
+	.db	%01000001,%10000000,%00000001
+	.db	%01000001,%00000001,%01010001
+	.db	%01001000,%00000000,%00000001
+	.db	%01000000,%00000000,%00100001
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000000,%00011001
+	.db	%01000000,%00100000,%00000001
+	.db	%01000000,%00000000,%00000001
+	.db	%01011001,%00010000,%01000101
+	.db	%01000110,%01000001,%10010001
+	.db	%01000000,%00000000,%00000001
+	.db	%01000001,%00000000,%01000001
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000000,%00010001
+	.db	%01000001,%01000000,%01010001
+	.db	%01001001,%10000000,%00000001
+	.db	%01000000,%00000101,%00000001
+	.db	%01000000,%00001001,%00100001
+	.db	%01000110,%00000000,%00000001
+	.db	%01000101,%00010000,%00000001
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000000,%00000001
+	.db	%01010000,%00011000,%00000001
+	.db	%01000000,%01010100,%00000001
+	.db	%01000100,%10010000,%01100001
+	.db	%01010101,%00000001,%01010001
+	.db	%01000110,%00000000,%01100001
+	.db	%01000000,%00000000,%00010001
+	.db	$07,$06,$07,$04,$05
+	.db	%01010101,%00000000,%00000001
+	.db	%01010100,%00011001,%00000001
+	.db	%01010000,%00100110,%00000001
+	.db	%01000000,%00011001,%10000001
+	.db	%01000000,%01000000,%01000001
+	.db	%01000000,%00000000,%00000101
+	.db	%01000000,%00000000,%00010101
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000101,%00000001
+	.db	%01000000,%00000001,%10010001
+	.db	%01000100,%01000010,%01000001
+	.db	%01001001,%10000001,%10010001
+	.db	%01000100,%01000000,%00000001
+	.db	%01000000,%00000000,%00000001
+	.db	%01000000,%00000000,%00010001
+	.db	$07,$06,$07,$04,$05
+	.db	%01010101,%01000000,%00000001
+	.db	%01010101,%00000000,%00000101
+	.db	%01010110,%00011000,%00000001
+	.db	%01011000,%01010100,%00100101
+	.db	%01000000,%00010000,%10010101
+	.db	%01010000,%00000000,%01010101
+	.db	%01000000,%00000001,%01010101
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000000,%00000001
+	.db	%01000001,%10000001,%01000001
+	.db	%01000001,%01010010,%01100001
+	.db	%01000000,%00010000,%00000001
+	.db	%01010101,%00100000,%00000001
+	.db	%01010110,%00000101,%01000001
+	.db	%01000000,%00000000,%00000001
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000000,%00000001
+	.db	%01000101,%10000001,%01000001
+	.db	%01000100,%01000110,%00000001
+	.db	%01000100,%01001001,%10000001
+	.db	%01000100,%01000010,%01000001
+	.db	%01000101,%00000101,%00000001
+	.db	%01000000,%00000000,%00000001
+	.db	$07,$06,$07,$04,$05
+	.db	%01000000,%00000000,%00000001
+	.db	%01000001,%00000101,%00000001
+	.db	%01000100,%01000010,%01000001
+	.db	%01001001,%10000001,%10000001
+	.db	%01000100,%01000010,%01000001
+	.db	%01000001,%00000101,%00000001
+	.db	%01000000,%00000000,%00000001
+	.db	$07,$06,$07,$04,$05
+
+	.db	%11000000,%00000000,%00000011	; level by Tim Redmond
+	.db	%11001100,%00000010,%00110011
+	.db	%11000000,%00001111,%00000011
+	.db	%11000100,%10111110,%00010011
+	.db	%11000000,%11110000,%00000011
+	.db	%11001100,%10000000,%00110011
+	.db	%11000000,%00000000,%00000011
+	.db	$07,$0A,$01,$01,$04
+
+	.db	%11111110,%11111011,%10111111	; level by Tim Redmond
+	.db	%11100000,%00000000,%00001011
+	.db	%11110000,%00110011,%00111111
+	.db	%11110000,%00110011,%00111111
+	.db	%11100000,%11100000,%00001011
+	.db	%11110000,%11000011,%00111111
+	.db	%11110000,%00000000,%00000011
+	.db	4,2,7,7,7
+
+.end

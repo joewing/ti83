@@ -1,0 +1,71 @@
++-------------------------------------------------------+
+|                      DStar v2.6 (ION)                 |
+|                    by Joe Wingbermuehle		|
+|                         01-11-2000                    |
++-------------------------------------------------------+
+
+>This programs requires ION v1.4+ to run!
+
+>The ION Port was made by Jason Kovacs (Jason_K@calc.org).
+
+>To install (assuming you already have ION):
+If you have a TI-83, send DStar.83p to your calculator,
+but for the TI-83+, send DStar.8xp. The extenstion to
+these files is important for which one you should send.
+
+>The object of the game is to move the dark ball around and
+get the white balls, but you must move all the way to the
+next wall with every move.  You may use the [2nd] key to
+swap the box and the dark ball.
+
+>To play, just use the arrow keys, [2nd] to swap the
+dark box and ball, [ALPHA] to restart a level, and
+[DEL] to quit.  [TRACE] saves a game and [GRAPH] loads
+a game.
+
+>DStar history
+Version 1.x
+	-history not recorded (text version)
+Version v2.0
+	-one simple level
+Version 2.1
+	-four levels
+	-levels are compressed
+	-move count
+	-[DEL] restarts a level
+	-losser if over 1024 moves
+Version 2.2
+	-seven levels
+	-fixed move count bug (went back to 0 if over 255 moves)
+Version 2.3
+	-made it a lot faster
+	-eight levels
+Version 2.4
+	-ten levels
+	-more optimized (uses apd ram for variables)
+	-keys are different!  SEE ABOVE!
+Version 2.5
+	-coding is much better
+	-levels are compressed even more.
+	-losser if over 65535 moves.
+	-better interface (in my opinion)
+	-save game feature
+	-written for SOS!
+Version 2.6 <> 07-01-1998
+	-Fixed a nasty bug
+	-Added some levels by Tim Redmond (levels 1,2)
+	-made the program a little smaller
+Version 2.6 <> 01-11-2000
+	-ION Version released.
+
+>Features to be added:
+	-external levels (or at least more levels)
+	-best score
+	-you tell me! If you can crash it TELL ME!
+
+>Thanks to Tim Redmond for levels 1 & 2!
+Anyone else care to make a level?
+
+Joe Wingbermuehle
+http://joewing.net
+

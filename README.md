@@ -12,6 +12,9 @@ Snake game.
 > Diamonds
 A Breakout-like game with a twist.
 
+> DStar
+DStar game.
+
 > Ion
 A shell for running programs.
 
