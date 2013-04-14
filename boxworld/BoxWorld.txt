@@ -1,0 +1,42 @@
++-------------------------------------------------------+
+|                         BoxWorld v1.1                 |
+|                     by Joe Wingbermuehle              |
+|                   12-05-1997 <> 06-08-1998            |
++-------------------------------------------------------+
+
+>This program requires SOS and ZLib! To get these programs
+as well as the latest version of BoxWorld, go to
+http://www.usmo.com/~joewing.
+
+>Installation
+-Copy boxworld.83g to your calculator.
+-Run INSTALL from within SOS.
+-BOXWORLD is now ready to be run!
+
+>This is a puzzle game in which the object is to get rid
+of all the boxes.  This is done by pushing them on to the
+':' which recycles the boxes for use on the next level.
+
+>To play, use the arrow keys.  To quit a game, press
+[DEL].  To restart a level, press [CLEAR].  To move to
+the next level press [+], and to go to a previous level
+press [-].
+
+>To make your own levels, see the source for the standard levels.
+
+>History
+Version 1.0
+        -first release
+        -six levels
+Version 1.1
+        -Levels are external.
+        -Levels are compressed.
+        -Optimized for SOS and ZLib.
+        -Shows what level you are on between levels.
+
+>Future additions
+        -Tell me!
+
+
+Joe Wingbermuehle
+http://joewing.net
