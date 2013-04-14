@@ -13,6 +13,7 @@ on both the TI-83 and TI-83+.
 * Jezzball - Jezzball game.
 * Landmine - Minesweeper-like game.
 * Maze - Maze generator and game.
+* Mem - Memory dump utility (TI-83+).
 * Orbix - Orbix game, like Othello.
 * SpaceWar - SpaceWar game.
 * Tunnel - Tunnel game.

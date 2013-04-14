@@ -1,0 +1,111 @@
+; Mem v1.0 by Joe Wingbermuehle 19990625
+
+	.nolist
+	#include	"joeti83p.inc"
+	.list
+
+	.org	$9D95
+
+location	=sram
+
+	ld	hl,$8000
+	ld	(location),hl
+nextLocation:
+	bcall(_homeup)
+	ld	hl,(location)
+	push	hl
+	ld	b,7
+dispLoop:
+	push	bc
+	call	dispmem
+	pop	bc
+	djnz	dispLoop
+	pop	hl
+	push	hl
+	ld	a,h
+	call	dispa
+	pop	hl
+	ld	a,l
+	call	dispa
+	bcall(_getkey)
+	ld	hl,(location)
+	ld	de,$0800
+	dec	a		; right
+	jr	nz,notRight
+	add	hl,de
+notRight:
+	dec	a		; left
+	jr	nz,notLeft
+	sbc	hl,de
+notLeft:
+	ld	de,7*4
+	dec	a		; up
+	jr	nz,notUp
+	add	hl,de
+notUp:	dec	a		; down
+	jr	nz,notDown
+	sbc	hl,de
+notDown:
+	cp	64-4		; 2nd+mode
+	ret	z
+	ld	(location),hl
+	jr	nextLocation
+
+dispmem:
+	push	hl
+	call	disphex
+	call	disphex
+	call	disphex
+	call	disphex
+	pop	hl
+	call	dispvalue
+	call	dispvalue
+	call	dispvalue
+	jp	dispvalue
+
+dispvalue:
+	push	hl
+	ld	a,(hl)
+	and	%01111111
+	bcall(_putc)
+	pop	hl
+	inc	hl
+	ret
+
+disphex:
+	push	hl
+	ld	a,(hl)
+	call	dispa
+	ld	a,' '
+	bcall(_putc)
+	pop	hl
+	inc	hl
+	ret
+hexString:
+	.db	"0123456789ABCDEF"
+
+dispa:	push	af
+	and	%11110000
+	rra
+	rra
+	rra
+	rra
+	ld	l,a
+	ld	h,0
+	ld	de,hexString
+	push	de
+	add	hl,de
+	ld	a,(hl)
+	bcall(_putc)
+	pop	de
+	pop	af
+	and	%00001111
+	ld	l,a
+	ld	h,0
+	add	hl,de
+	ld	a,(hl)
+	bcall(_putc)
+	ret
+
+.end
+END

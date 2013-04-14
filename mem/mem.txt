@@ -1,0 +1,21 @@
+Mem v1.0
+by Joe Wingbermuehle
+19990625
+
+>Requirements
+A TI-83 Plus!
+
+>Installation
+Send mem.8xp to you TI-83 Plus
+Run Mem by entering "Asm(prgmMEM" and pressing [ENTER].
+
+>Description and Usage
+This is a memory viewer that allows one to scroll through the TI-83 Plus's memory. Use the up and down arrows to move page by page and use the left and right arrows to move in steps of $0800. Press [2nd]+[MODE] to quit and press any other key to refresh the screen.
+Just FYI, this is the program I used to figure out the VAT structure as well as other things.
+
+>History
+Version 1.0
+	-First release.
+
+Joe Wingbermuehle
+http://joewing.net
