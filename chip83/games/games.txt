@@ -1,0 +1,106 @@
+Game descriptions and directions.
+
+>Blinky
+This is a Pacman clone.
+[2] - moves right
+[1] - moves left
+[9] - moves up
+[6] - moves down
+At the highscore screen, [+] starts a new game.
+
+>Blitz
+The object of this game is to destroy all the buildings before you run
+into them by dropping missiles as your plane flys across the screen.
+[5] - Starts/Drops missile.
+
+>Brix
+A Breakout game.
+[4] - moves left
+[6] - moves right
+
+>Connect4
+2-Player Connect4.
+Move with 4 and 6. Select a row with 5.
+
+>Guess
+You are to think of a number between 1 and 63. Press 5 if you see the
+number on the board and another key if you don't.
+
+>Hidden
+Same as Memory.
+Use 2,4,6,8 to move in their respective directions, and 5 to uncover
+a space.
+
+>Invaders
+A Space Invaders game.
+Use 4,6 to move in their respective directions, and 5 to shot/start.
+
+>Kaleid
+A drawing program.
+Use 2,4,6,8 to move and [.] to have the calculator repeat your moves.
+
+>Maze
+A maze generator. Does nothing but draw a maze.
+
+>Merlin
+A Simon type game.
+Use 1,2,3,4 to select their respective spaces.
+
+>Missile
+A game where you shoot missiles at diamonds at the top of the screen.
+Use [2] to shoot.
+
+>Pong
+Pong.
+Use 7,4 to move player 1 and /,* to move player 2.
+
+>Pong2
+Same as Pong, but with a line down the middle of the screen.
+
+>Puzzle
+A game where you put the tiles in order.
+Use 2,4,6,8 to move the pieces.
+
+>15Puzzle
+Same as Puzzle, but not as graphical.
+The keys one the keyboard line up to each of the spaces.
+
+>SYZYGY
+A Snake game.
+You must get the 0s to get points while avoiding running into yourself
+or the walls.
+At the start screen press [+] for walls or [-] for no walls.
+1,2 moves left/right.
+6,9 moves down/up.
+[(-)] exits the score screen.
+
+>Tank
+A game where you move the tank around trying to shoot the other thing.
+2,4,6,8 move the tank and 5 shoots. Note that 2 and 8 work backwards.
+
+>Tetris
+Tetris.
+Move piece with 5 and 6. Rotate piece with 4 and speed it up with 1.
+
+>TicTac
+2-Player Tic-Tac-Toe.
+Use keys 1 thru 9 to select their respective spaces.
+
+>UFO
+A game where you try to shoot the ships.
+Use 4,5,6 to shoot in their respective directions.
+
+>VBrix
+Same as Brix, but sideways (and a little different)!
+Use 4,7 to move and 1 to start.
+
+>Vers
+Tron game.
+1,0 move up/down player 1.
+7,8 move left/right player 1.
+/,* move up/down player 2.
+[(-)],[+] move left/right player 2.
+
+>WipeOff
+Another Breakout type game.
+Use 4,6 to move.
